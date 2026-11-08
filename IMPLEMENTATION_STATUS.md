@@ -1,38 +1,31 @@
 # Implementation status
 
-## Delivery state
+## Delivery
 
-Implementation is present, but the Definition of Done is **not yet satisfied**. This execution environment denied dependency downloads, local listening sockets, writes to the installed Codex runtime, and `.git` creation. Its policy rejects execution-permission escalation. Normal development access has been requested; no permission grant has arrived.
+The first usable version is implemented and verified. The earlier execution-sandbox blockers were removed when full access was enabled. Dependencies are installed, the lockfile is committed, the production frontend builds, and real Codex session creation, generation, interruption and resumption have passed.
 
-## Implemented
+## Implemented behavior
 
-- React/TypeScript desktop UI with book switching, graph pan/zoom, tree resume, reading pane, questions, progress, retry, Clear confirmation, Markdown and LaTeX.
-- Express loopback API with input validation, origin/Host checks, SSE updates and SQLite persistence.
-- Explicit per-tree reading cursors; route-slot return references; single and multi-step explanations; nested returns; revisiting completed nodes; duplicate-action protection.
-- One successor buffered on the active route; serialized per-book jobs; question priority; cancellation tokens; canvas epochs and stale-result rejection.
-- Structured AI slot allocation and output validation; immutable content revisions; preservation of displayed/completed versions.
-- Codex App Server adapter for persistent thread creation/resumption, streaming, schema-constrained turns, interruption, timeout and disconnect recovery. Actual installed CLI 0.167.0 generated bindings were inspected.
-- Deterministic demo provider, original sample material, installation documentation, and executable live/browser verification scripts.
+- Multiple local books, one persistent Codex conversation per book, and multiple learning trees per map.
+- Interactive graph, explicit tree resume, node reading, Markdown/LaTeX, question branches, generation feedback, retry, and Clear.
+- Formal reading positions separate from displayed nodes; one successor buffered on the active route; explicit completion and duplicate-action protection.
+- Single/multiple/nested explanations and return targets captured when the question is submitted, including targets not yet generated.
+- Question priority, serialized per-book jobs, interruption, canvas epochs, stale-result rejection, and preservation of completed results.
+- Validated structured AI output and immutable revisions of unread content. Old versions remain viewable; current or completed nodes cannot be silently replaced.
+- Transactional SQLite persistence, restart recovery, and retryable interruption states.
+- Read-only Codex material access, loopback HTTP, origin checks, and a separate, explicitly labeled deterministic demo mode.
 
-## Executed checks
+## Verification completed (2026-11-09, Asia/Shanghai)
 
-- **15 automated tests passed**, including an actual child-process JSON-RPC fixture. Coverage includes every deterministic acceptance scenario: initial steps, buffering, browsing purity, single/multiple/nested explanations, old-node questions, duplicate Continue, priority/cancellation races, unknown return destinations, revisions, multiple trees, Clear during generation, restart, retries, endings, malformed output, FIFO questions, and protocol streaming/interruption/resumption.
-- Strict TypeScript checking passed for shared types, the state engine, storage, Codex adapter, demo provider, state tests and live/protocol scripts, using an existing local compiler.
-- Frontend, HTTP entry point, and browser-test sources passed esbuild syntax transformation.
-- A local existing Zod package's `zod/v4` export enabled offline tests. This temporary dependency directory is ignored; a normal `npm install` remains necessary to obtain the declared application dependencies.
+- **16 automated tests passed** (`npm test`). These cover the graph state machine, subprocess JSON-RPC transport, and real HTTP requests. HTTP testing launches, stops, and restarts the application and checks persisted reading state, book isolation, SSE, input/origin validation, and Clear during generation.
+- **Full TypeScript check and production build passed** (`npm run build`).
+- **Chrome browser verification passed** against the running application: book registration/switching, prompt generation, reading, Continue/prefetch, browsing without cursor movement, old-node questions, nested explanation returns, LaTeX rendering, refresh recovery, desktop/narrow layouts, and Clear. No browser page exceptions were observed. Desktop and narrow screenshots were visually inspected.
+- **Real Codex integration passed** using installed CLI 0.167.0 and the user's configured model: local material reading, structured S1/S2 generation, background S3, an old-node explanation returning to the active reading position, Clear preserving the thread, and application/provider restart followed by `thread/resume` using the same thread ID.
+- **Actual `turn/interrupt` passed**: the App Server confirmed `interrupted`; Clear kept the conversation and the map remained empty.
+- Generated proof steps from the original convergence fixture were reviewed for conceptual boundaries, notation and valid epsilon–N reasoning; Markdown/LaTeX strings were checked for proper encoding.
 
-## Verification blocked by the execution environment
+Verification artifacts are local and ignored by Git: `.data/screenshots/desktop.png`, `.data/screenshots/narrow.png`, and `.data/live-*/result.json` plus `interrupt-result.json`. Test workspaces are separate from the normal application database.
 
-- `npm install`: registry DNS failed with `ENOTFOUND`; offline install also failed because required packages are absent from cache. No lockfile could be resolved honestly.
-- Full frontend typecheck and production build: awaiting dependencies.
-- Actual HTTP startup/browser tests: a minimal Node server failed with `listen EPERM` on `127.0.0.1`.
-- Actual Codex session generation/resumption: App Server exited because it could not initialize its SQLite runtime under `~/.codex`. Model-network access is also unavailable. Fixture protocol success does not verify a real model session.
-- Git history: `git init` failed because this task’s filesystem policy makes `.git` read-only. No commits were created.
+## Scope and practical limits
 
-## Remaining acceptance work
-
-With ordinary local development permissions: install dependencies; run `npm run build` and fix any discovered issues; launch demo mode; execute and visually inspect browser verification; execute live Codex verification and review actual generated mathematics; initialize and commit the source. The implementation is not represented as a verified working delivery until those checks succeed.
-
-## Scope limits
-
-Local, single-user desktop application. Textbook PDF extraction depends on local Codex tooling. No hosting, collaboration, or cross-device sync. The demo is deliberately deterministic and unsuitable for arbitrary mathematics questions.
+This is a local, single-user desktop product. There is no hosting, collaboration, or cross-device sync. PDF extraction depends on tools available to the installed Codex runtime; Markdown/plain text is the most reliable material format. Generation latency follows the user's configured model and reasoning settings; unfinished requests time out after five minutes with a retry action. Demo content is fixed and is not an arbitrary mathematics tutor.

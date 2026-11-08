@@ -92,8 +92,8 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-symbol">∴</span><div>lemma<small>ONE STEP AT A TIME</small></div></div>
       <div className="sidebar-heading">YOUR BOOKS <button aria-label="Add book" onClick={()=>setShowAdd(true)}>＋</button></div>
-      <nav aria-label="Books">{books.map(b=><button className={`book-button ${book?.id===b.id?'active':''}`} key={b.id} onClick={()=>{setBookId(b.id);localStorage.setItem('lemma-book',b.id);}}><span className="book-icon">▤</span><span>{b.name}<small>{Object.keys(b.trees).length} learning {Object.keys(b.trees).length===1?'tree':'trees'}</small></span></button>)}</nav>
-      <button className="add-book" onClick={()=>setShowAdd(true)}>＋ Add a book</button>
+      <nav aria-label="Books">{books.map(b=><button className={`book-button ${book?.id===b.id?'active':''}`} key={b.id} aria-label={`Open book ${b.name}`} title={b.name} onClick={()=>{setBookId(b.id);localStorage.setItem('lemma-book',b.id);}}><span className="book-icon">▤</span><span>{b.name}<small>{Object.keys(b.trees).length} learning {Object.keys(b.trees).length===1?'tree':'trees'}</small></span></button>)}</nav>
+      <button className="add-book" aria-label="Add another book" title="Add a book" onClick={()=>setShowAdd(true)}>＋ Add a book</button>
       <div className="sidebar-footer"><span className={`connection-dot ${online?'':'offline'}`}/>{online?'Workspace saved locally':'Reconnecting…'}<small>{state?.provider==='demo'?'Demo · fixed sample content':'Powered by your local Codex'}</small></div>
     </aside>
     <main>

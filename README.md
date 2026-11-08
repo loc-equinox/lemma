@@ -7,7 +7,7 @@ A local mathematics learning workspace: read one conceptual step, ask a question
 Requirements: Node.js 22.13 or newer, npm, and an installed/authenticated Codex CLI (`codex login`). For live generation, the launching terminal must permit normal local networking and writes to your Codex runtime directory.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -78,7 +78,7 @@ npm run test:browser
 
 The browser test requires Google Chrome (or `CHROME_PATH`) and writes screenshots under `.data/screenshots`. It registers a verification book and clears that book’s map at the end; use the isolated test data directory. The live test creates a real persistent test Codex thread, checks material reading, background generation, a question return, Clear, restart and thread resumption. The interruption test resumes that isolated test workspace and confirms an actual interrupted turn after Clear. It uses ordinary model usage and keeps evidence under `.data/live-*`.
 
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for tests actually executed and current environment blockers. Browser and live-model verification must not be inferred from fixture tests.
+The state/HTTP suite, full build, Chrome browser workflow, and real Codex generation/resumption/interruption have all passed. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the verification record and practical limits.
 
 ## Project structure
 

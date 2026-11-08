@@ -12,14 +12,16 @@ async function waitFor(predicate: (s:any)=>boolean) {
 }
 try {
  await page.goto(base);
- await page.getByRole('button',{name:'Add a book',exact:true}).click();
+ await page.getByRole('button',{name:'Add book',exact:true}).click();
  await page.getByLabel('Book name').fill('Browser verification');
  await page.getByLabel('Material directory').fill(resolve('examples/materials'));
- await page.getByRole('button',{name:'Add book',exact:true}).click();
+ const added=page.waitForResponse(r=>r.url()===base+'/api/books' && r.request().method()==='POST');
+ await page.getByRole('dialog').getByRole('button',{name:'Add book'}).click();
+ const created=await (await added).json();
  await page.getByLabel('New learning prompt').fill('Prove that 1/n converges to zero');
  await page.getByRole('button',{name:'Start learning'}).click();
- let bookId='';
- await waitFor(s=>{const b:any=Object.values(s.books).find((b:any)=>b.name==='Browser verification');bookId=b?.id;return b&&Object.keys(b.nodes).length===2;});
+ const bookId=created.id;
+ await waitFor(s=>{const b=s.books[bookId];return b&&Object.keys(b.nodes).length===2;});
  await page.getByRole('button',{name:'Reading S1'}).click();
  await page.locator('.reader .katex').first().waitFor();
  let b=(await state()).books[bookId];const first=b.routes[Object.values<any>(b.trees)[0].routeId].nodeIds[0];
@@ -33,7 +35,12 @@ try {
  await page.getByRole('button',{name:'Comment',exact:false}).click();
  await page.getByRole('button',{name:'Enter explanation'}).click();
  await waitFor(s=>Object.keys(s.books[bookId].nodes).length===5);
- await page.getByRole('button',{name:/Continue to S1\.1b/}).click();
+ await page.getByLabel('Something unclear?').fill('Can you explain this explanation more carefully?');
+ await page.getByRole('button',{name:'Comment',exact:false}).click();
+ await page.getByRole('button',{name:'Enter explanation'}).click();
+ await waitFor(s=>Object.keys(s.books[bookId].nodes).length===7);
+ await page.getByRole('button',{name:'Continue to S1.1a.1b'}).click();
+ await page.getByRole('button',{name:'Return to S1.1b'}).click();
  await page.getByRole('button',{name:'Return to S2'}).click();
  await page.getByRole('button',{name:'Continue to S3'}).waitFor();
  assert.equal(JSON.stringify(Object.values<any>((await state()).books[bookId].trees)[0].cursor),cursorBefore);
@@ -41,11 +48,19 @@ try {
  await page.getByRole('button',{name:'Reading S2'}).click();
  await page.locator('.reader .katex').first().waitFor();
  mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/desktop.png',fullPage:true});
- await page.setViewportSize({width:780,height:900});await page.screenshot({path:'.data/screenshots/narrow.png',fullPage:true});
+ await page.setViewportSize({width:780,height:900});await page.waitForTimeout(300);await page.screenshot({path:'.data/screenshots/narrow.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'Add another book',exact:true}).click();
+ await page.getByLabel('Book name').fill('Second verification book');
+ await page.getByLabel('Material directory').fill(resolve('examples/materials'));
+ await page.getByRole('dialog').getByRole('button',{name:'Add book'}).click();
+ await page.getByRole('heading',{name:'Second verification book'}).waitFor();
+ await page.getByRole('button',{name:'Open book Browser verification',exact:true}).last().click();
+ await page.getByRole('button',{name:'Reading S2'}).waitFor();
  await page.getByRole('button',{name:'Clear map',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Clear map',exact:true}).click();
  await waitFor(s=>Object.keys(s.books[bookId].nodes).length===0);
  assert.ok((await state()).books[bookId].threadId);
  assert.deepEqual(errors,[]);
- console.log('Browser workflows, LaTeX, persisted progress, branch return, responsive layouts and Clear passed.');
-} finally {await browser.close();}
+ console.log('Browser workflows, book switching, LaTeX, persisted progress, nested branch return, responsive layouts and Clear passed.');
+} catch (error) { mkdirSync('.data/screenshots',{recursive:true}); await page.screenshot({path:'.data/screenshots/browser-failure.png',fullPage:true}); console.error('Browser errors:', errors); throw error; } finally {await browser.close();}
