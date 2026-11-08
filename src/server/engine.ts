@@ -133,14 +133,14 @@ export class Engine extends EventEmitter {
     try {
       const output = await this.provider.generate({ book: structuredClone(b), job: structuredClone(j), ids, parentId }, controller.signal,
         message => { if (j.status === 'running' && b.epoch === j.epoch) { j.progress = message; this.emit('change'); } },
-        threadId => { b.threadId = threadId; this.save(); });
+        threadId => { if (!this.stopped) { b.threadId = threadId; this.save(); } });
       if (controller.signal.aborted || j.status !== 'running' || b.epoch !== j.epoch) return;
       this.commit(b, j, outputSchema.parse(output), ids, parentId);
       j.status = 'completed'; j.progress = undefined;
       const t = currentTree(b); if (t) t.cursor = resolveRef(b, t.cursor);
       this.ensureAhead(b); this.save();
     } catch (error) {
-      if (j.status === 'running' && b.epoch === j.epoch) { j.status = controller.signal.aborted ? 'cancelled' : 'failed'; j.error = error instanceof Error ? error.message : String(error); this.save(); }
+      if (!this.stopped && j.status === 'running' && b.epoch === j.epoch) { j.status = controller.signal.aborted ? 'cancelled' : 'failed'; j.error = error instanceof Error ? error.message : String(error); this.save(); }
     } finally { this.running.delete(bookId); if (!this.stopped) this.pump(bookId); }
   }
   commit(b: Book, j: Job, out: Output, ids: string[], parentId: string | null) {
@@ -168,5 +168,14 @@ export class Engine extends EventEmitter {
     });
     r.finished = out.finished;
   }
-  close() { this.stopped = true; for (const { controller } of this.running.values()) controller.abort(); this.provider.close?.(); }
+  close() {
+    if (this.stopped) return;
+    this.stopped = true;
+    for (const b of Object.values(this.state.books)) for (const j of Object.values(b.jobs)) {
+      if (j.status === 'running' || j.status === 'queued') { j.status = 'failed'; j.error = 'Application stopped during generation. Retry to continue.'; }
+    }
+    this.save();
+    for (const { controller } of this.running.values()) controller.abort();
+    this.provider.close?.();
+  }
 }

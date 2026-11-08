@@ -12,7 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "tsx scripts/browser-test.ts",
-    "test:live": "tsx scripts/live-test.ts"
+    "test:live": "tsx scripts/live-test.ts",
+    "test:live:interrupt": "tsx scripts/live-interrupt-test.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.0",

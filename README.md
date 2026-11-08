@@ -66,6 +66,7 @@ The service binds to loopback and rejects foreign browser origins. Codex session
 npm test                    # State machine + subprocess protocol fixtures
 npm run build               # Whole-project TypeScript check and frontend build
 npm run test:live            # Actual local Codex, isolated application database
+npm run test:live:interrupt  # Interrupt a real turn in that test workspace
 ```
 
 For browser verification, start a separate demo instance in one terminal, then run the browser test in another:
@@ -75,7 +76,7 @@ AI_PROVIDER=demo DATA_DIR=.data/browser-test npm run dev
 npm run test:browser
 ```
 
-The browser test requires Google Chrome (or `CHROME_PATH`) and writes screenshots under `.data/screenshots`. It registers a verification book and clears that book’s map at the end; use the isolated test data directory. The live test creates a real persistent test Codex thread, checks material reading, background generation, a question return, Clear, restart and thread resumption. It uses ordinary model usage and keeps evidence under `.data/live-*`.
+The browser test requires Google Chrome (or `CHROME_PATH`) and writes screenshots under `.data/screenshots`. It registers a verification book and clears that book’s map at the end; use the isolated test data directory. The live test creates a real persistent test Codex thread, checks material reading, background generation, a question return, Clear, restart and thread resumption. The interruption test resumes that isolated test workspace and confirms an actual interrupted turn after Clear. It uses ordinary model usage and keeps evidence under `.data/live-*`.
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for tests actually executed and current environment blockers. Browser and live-model verification must not be inferred from fixture tests.
 
