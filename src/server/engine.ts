@@ -3,13 +3,13 @@ import { importedReferences, installReference, readDocuments, saveDocument } fro
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { realpathSync, statSync } from 'node:fs';
-import type { Book, Job, Output, Ref, Route, Step } from '../shared/types';
+import type { Book, Job, Output, Ref, Route, Step, GenerationMetrics } from '../shared/types';
 import { currentTree, nodeAt, resolveRef } from '../shared/types';
 import { Store } from './store';
 import { defaultGeneration, resolveGeneration, type GenerationSettings, type ModelCatalog } from '../shared/models';
 import { outputSchema, documentOutputSchema } from './protocol';
 export interface GenerationContext { documents?: DocumentSnapshot[]; book: Book; job: Job; ids: string[]; parentId: string | null }
-export interface Provider { listModels?(directory: string): Promise<ModelCatalog>; generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void): Promise<Output | DocumentOutput>; close?(): void }
+export interface Provider { listModels?(directory: string): Promise<ModelCatalog>; generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void, report?: (metrics: GenerationMetrics) => void): Promise<Output | DocumentOutput>; close?(): void }
 const id = () => randomUUID();
 const now = () => new Date().toISOString();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -170,8 +170,9 @@ export class Engine extends EventEmitter {
     try {
       const documents = readDocuments(b.directory);
       const output = await this.provider.generate({ book: structuredClone(b), job: structuredClone(j), ids, parentId, documents }, controller.signal,
-        message => { if (j.status === 'running' && b.epoch === j.epoch) { j.progress = message; this.emit('change'); } },
-        threadId => { if (!this.stopped) { b.threadId = threadId; this.save(); } });
+        message => { if (j.status === 'running' && b.epoch === j.epoch && j.progress !== message) { j.progress = message; this.emit('change'); } },
+        threadId => { if (!this.stopped) { b.threadId = threadId; this.save(); } },
+        metrics => { if (b.epoch === j.epoch) j.metrics = metrics; });
       if (controller.signal.aborted || j.status !== 'running' || b.epoch !== j.epoch) return;
       if (isDocumentJob(j)) {
         const result = documentOutputSchema.parse(output);

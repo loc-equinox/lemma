@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
+import { readFileSync, appendFileSync } from 'node:fs';
+const log=value=>{if(process.env.FAKE_CODEX_LOG)appendFileSync(process.env.FAKE_CODEX_LOG,JSON.stringify({pid:process.pid,...value})+'\n');};
+log({event:'spawn'});
 let threadId='fixture-thread',turnId='',timer;
 const send=m=>process.stdout.write(JSON.stringify(m)+'\n');
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line),p=m.params;
+ log({method:m.method,params:p});
  if(m.method==='initialize')return send({id:m.id,result:{userAgent:'test-protocol'}});
  if(m.method==='initialized')return;
  if(m.method==='config/read')return send({id:m.id,result:{config:{model:'fixture-alpha',model_reasoning_effort:'high'}}});
@@ -14,14 +18,17 @@ createInterface({input:process.stdin}).on('line',line=>{
  }
  if(m.method==='thread/start'||m.method==='thread/resume'){
   if(p.cwd===undefined||p.sandbox!=='read-only'||p.approvalPolicy!=='never')return send({id:m.id,error:{message:'unsafe thread config'}});
-  if(m.method==='thread/resume'&&p.threadId!==threadId)return send({id:m.id,error:{message:'unknown thread'}});
+  if(m.method==='thread/resume'&&(p.threadId!==threadId||p.excludeTurns!==true))return send({id:m.id,error:{message:'unknown thread or unnecessary full-history response'}});
   return send({id:m.id,result:{thread:{id:threadId}}});
  }
  if(m.method==='turn/start'){
   if(!p.outputSchema||p.threadId!==threadId)return send({id:m.id,error:{message:'Missing schema or thread'}});
   const task=JSON.parse(p.input[0].text);turnId='turn-'+task.jobId;
+  if(task.nodes||task.routes||task.studyDocuments.some(d=>'content' in d))return send({id:m.id,error:{message:'Unexpected full context replay'}});
+  const snapshot=JSON.parse(readFileSync(task.lookup.file,'utf8'));
+  if(snapshot.jobId!==task.jobId||snapshot.canvasEpoch!==task.canvasEpoch)return send({id:m.id,error:{message:'Wrong lookup snapshot'}});
   send({id:m.id,result:{turn:{id:turnId,status:'inProgress'}}});
-  send({method:'item/agentMessage/delta',params:{threadId,turnId,delta:'working'}});
+  for(let i=0;i<100;i++)send({method:'item/agentMessage/delta',params:{threadId,turnId,delta:'working'}});
   timer=setTimeout(()=>{
    const ids=task.allocatedIds;
    const output={jobId:task.jobId,routeId:task.routeId,finished:true,continuation:task.returnTo,revisions:[],steps:ids.map((id,i)=>({id,title:`Verified ${p.model}/${p.effort}`,content:'$1/n \\to 0$.',parentId:i?ids[i-1]:task.firstParentId,nextId:ids[i+1]||null}))};

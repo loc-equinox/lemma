@@ -34,7 +34,7 @@ This is a local, single-user desktop product. There is no hosting, collaboration
 
 ## Durable study context update
 
-Implemented GUI tasks for `STUDY_PROGRESS.md` and chapter sections in `STUDY_NOTES.md`, with explicit task selection and `/progress` / `/notes` commands. Both documents are included as fresh context in subsequent Codex generations. The backend performs validated writes to these two names; Codex remains read-only.
+Implemented GUI tasks for `STUDY_PROGRESS.md` and chapter sections in `STUDY_NOTES.md`, with explicit task selection and `/progress` / `/notes` commands. Both documents are snapshotted locally for subsequent Codex generations; prompts include their paths and hashes, with exact content retrieved on demand. The backend performs validated writes to these two names; Codex remains read-only.
 
 Saved documents produce a separate read-only reference node type with source rendering/copying and version history. References do not participate in completion or reading navigation. Questions on references return to the saved active position; a reference-only workspace can start an independent explanation. Clear removes references and pending writes while retaining saved files; explicit reload restores them without model generation.
 

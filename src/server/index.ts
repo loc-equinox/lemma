@@ -12,7 +12,7 @@ const port = Number(process.env.PORT || 4317);
 const dataDir = resolve(process.env.DATA_DIR || '.data');
 const demo = process.env.AI_PROVIDER === 'demo';
 const store = new Store(resolve(dataDir, 'workspace.sqlite'));
-const engine = new Engine(store, demo ? new DemoProvider() : new CodexProvider());
+const engine = new Engine(store, demo ? new DemoProvider() : new CodexProvider(resolve(dataDir,'context')));
 app.disable('x-powered-by');
 app.use((req, res, next) => {
   const host = req.headers.host?.split(':')[0];

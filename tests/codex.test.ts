@@ -48,3 +48,29 @@ test('model catalog pagination, supported efforts, next-turn settings and persis
   const other=engine.addBook('Independent book',process.cwd());assert.deepEqual(other.generation,{model:null,effort:null});
  }finally{engine.close();store.close();if(original)process.env.CODEX_BIN=original;else delete process.env.CODEX_BIN;}
 });
+
+test('warm turns reuse catalog and process, coalesce progress events, record overhead and clean up lookup files',async()=>{
+ const {readFileSync,existsSync}=await import('node:fs');
+ const original=process.env.CODEX_BIN,oldLog=process.env.FAKE_CODEX_LOG;
+ process.env.CODEX_BIN=resolve('tests/fixtures/fake-codex.mjs');
+ const root=mkdtempSync(join(tmpdir(),'lemma-overhead-')),log=join(root,'rpc.jsonl');process.env.FAKE_CODEX_LOG=log;
+ const store=new Store(join(root,'state.sqlite')),provider=new CodexProvider(join(root,'context')),engine=new Engine(store,provider);
+ const records=()=>readFileSync(log,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+ try{
+  const b=engine.addBook('Overhead fixture',process.cwd());let changes=0;engine.on('change',()=>changes++);
+  engine.newTree(b.id,'First',randomUUID());await settle(engine,b.id);
+  assert.equal(Object.values(b.jobs).at(-1)!.status,'completed');
+  assert.ok(changes<10,`100 streaming deltas triggered ${changes} UI updates`);
+  assert.equal(records().filter(r=>r.event==='spawn').length,1,'Cold generation should initialize only one process');
+  provider.catalogs.get(b.directory)!.expires=0;
+  const previousLists=records().filter(r=>r.method==='model/list').length;
+  engine.newTree(b.id,'Warm after cache expiry',randomUUID());await settle(engine,b.id);
+  assert.equal(records().filter(r=>r.event==='spawn').length,1);
+  assert.equal(records().filter(r=>r.method==='model/list').length,previousLists);
+  const job=Object.values(b.jobs).at(-1)!;assert.ok(job.metrics);assert.ok(job.metrics.promptBytes<6000);assert.ok(job.metrics.totalMs!>=job.metrics.preparationMs);assert.ok(job.metrics.submitMs!==undefined);
+  for(const record of records().filter(r=>r.method==='turn/start'))assert.equal(existsSync(JSON.parse(record.params.input[0].text).lookup.file),false);
+  await engine.models(b.id);assert.equal(records().filter(r=>r.event==='spawn').length,1,'UI catalog refresh should reuse the book process');assert.ok(records().filter(r=>r.method==='model/list').length>previousLists);
+  engine.newTree(b.id,'slow cancellation',randomUUID());await new Promise(r=>setTimeout(r,100));engine.clear(b.id);await settle(engine,b.id);
+  const cancelled=records().filter(r=>r.method==='turn/start').at(-1);assert.equal(existsSync(JSON.parse(cancelled.params.input[0].text).lookup.file),false);
+ }finally{engine.close();store.close();if(original)process.env.CODEX_BIN=original;else delete process.env.CODEX_BIN;if(oldLog)process.env.FAKE_CODEX_LOG=oldLog;else delete process.env.FAKE_CODEX_LOG;}
+});

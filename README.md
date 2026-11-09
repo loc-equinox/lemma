@@ -61,16 +61,26 @@ You can also submit explicit commands in the ordinary prompt:
 
 Explicit update/save requests naming `STUDY_PROGRESS.md` or `STUDY_NOTES.md` are also recognized. Use the Task selector for instructions whose intent is ambiguous.
 
-- **Progress** updates `STUDY_PROGRESS.md` in the book directory. The request includes existing progress and notes plus actual reading state; prepared content must be distinguished from completed reading.
+- **Progress** updates `STUDY_PROGRESS.md` in the book directory. Codex can look up existing progress and notes alongside actual reading state; prepared content must be distinguished from completed reading.
 - **Chapter notes** save a managed chapter section in `STUDY_NOTES.md`. Existing CLI notes and other chapters remain in the file. Reuse the chapter title to replace that managed section.
 - Saved content appears as a gold **Reference / Read only** node with rendered/source views. It has no completion state or Continue action. Asking a question from a reference creates an explanation that returns to your saved reading position; with no active tree it creates a standalone question route.
-- Each subsequent Codex generation receives both latest study documents as context. The Codex tool sandbox stays read-only; the application performs the narrowly scoped file writes after validating the result.
+- Each subsequent Codex generation receives current file paths and hashes; it can read the relevant document sections when needed. Unchanged document bodies are not replayed in every prompt. The Codex tool sandbox stays read-only; the application performs the narrowly scoped file writes after validating the result.
 - **Open saved notes / Open saved progress** reloads existing files into reference nodes without generating AI content. This also works after Clear. CLI changes are picked up on subsequent generation or explicit reload.
 - Clear removes canvas references and cancels outstanding document tasks, while preserving saved Markdown files. Existing references are snapshots: a displayed older version stays readable with an update notice.
 
 File edits are checked against the version read at generation time. Conflicts fail visibly and can be retried against the latest file. Writes use a temporary file and atomic rename; before/after document bodies are retained in the application database's `document_writes` journal, including across Clear. The journal also recovers a completed file write if the application stopped before saving its canvas reference. This is separate from the temporary canvas data. Only regular files with the two specified names are supported; symlink targets are rejected and each document is limited to 512 KiB.
 
 Additional verification: `npx tsx scripts/notes-browser-test.ts` against an isolated demo server on port 4320, and `npx tsx scripts/notes-live-test.ts` for actual Codex generation using temporary fixture materials. Neither script writes study documents in your registered book directory.
+
+## Context and generation overhead
+
+Codex keeps the conversation history. Ordinary turns send a compact reading-state update, assigned output slots, recent step identifiers, and (for questions) a bounded quotation of the source. They do not resend the whole tree or study files. A temporary read-only JSON lookup outside the book directory lets Codex retrieve exact older nodes, route/version information, or note sections when needed, including after conversation compaction. It is removed after the job or graceful shutdown. The full graph and progress remain authoritative in SQLite; cancellation and Clear validation are unchanged.
+
+Normal continuation reuses the connected App Server and its known model catalog. Opening/reloading the model controls can refresh catalog metadata; expiry alone no longer adds a catalog query before generation. Resuming a thread requests metadata without returning the whole conversation to the application. Streaming text updates the status display only when its message changes.
+
+Each new job records request size and adapter preparation/submission/first-event/total timing in its optional `metrics` field for local diagnosis. These do not measure total model input tokens or promise a fixed response time. Existing conversation history remains intact and Codex continues to manage its compaction.
+
+`npx tsx scripts/context-benchmark.ts` compares a hypothetical next request against the old repeated context for the running workspace without generating content or changing reading state. `npx tsx scripts/context-live-test.ts` verifies actual continuation, exact historical lookup, progress writes and thread resumption in isolated temporary materials.
 
 ## Storage and configuration
 
