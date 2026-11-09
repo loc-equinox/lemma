@@ -35,7 +35,7 @@ export function prepareContext(ctx: GenerationContext, root = tmpdir()) {
       jobId:job.id, canvasEpoch:book.epoch,
       lookup: {
         file:path,
-        format:'JSON dictionaries keyed by ID: trees, routes, nodes, questions, references; documents keyed by filename. Use Python to select only needed entries/fields. Do not dump the entire file. This snapshot is valid only for this job.',
+        format:'JSON dictionaries keyed by ID: trees, routes, nodes, questions, references; documents keyed by filename. Use python3 to select only needed entries/fields. Do not dump the entire file. This snapshot is valid only for this job.',
       },
       studyDocuments:(ctx.documents || []).map(d=>({file:d.file,path:join(book.directory,d.file),hash:d.hash,bytes:Buffer.byteLength(d.content)})),
       activeReading:reading(book),
@@ -44,8 +44,8 @@ export function prepareContext(ctx: GenerationContext, root = tmpdir()) {
       const prompt = {
         ...common, task:job.request, file:documentFile(job.kind), sectionTitle:job.sectionTitle || null,
         instruction:job.kind === 'progress'
-          ? 'Update the complete STUDY_PROGRESS.md. Read its existing content from lookup.documents if present to preserve useful semantic history and user conventions. Query the snapshot for tree prompts, completed/current/prepared nodes and unresolved questions; read node bodies only if needed. Reference nodes are prepared material, not completed learning. State the next semantic study point without relying on canvas IDs. Return the document through the schema; the application saves it.'
-          : 'Prepare a reference summary of the requested chapter: definitions, hypotheses, conclusions and key proof ideas, preserving textbook notation and numbering. Reuse conversation context; consult local materials or selected snapshot entries only as needed. Read existing chapter titles/sections from lookup.documents.STUDY_NOTES.md to avoid duplication and preserve conventions. Distinguish a preview from material already studied. Return only this chapter body, without repeating its title or adding application section markers. Use sectionTitle if supplied; otherwise reuse the existing title for this chapter. The application saves the section and creates a read-only reference.',
+          ? 'Update the complete STUDY_PROGRESS.md. Read its existing content from the lookup JSON documents dictionary if present to preserve useful semantic history and user conventions. Query the snapshot for tree prompts, completed/current/prepared nodes and unresolved questions; read node bodies only if needed. Reference nodes are prepared material, not completed learning. State the next semantic study point without relying on canvas IDs. Return the document through the schema; the application saves it.'
+          : 'Prepare a reference summary of the requested chapter: definitions, hypotheses, conclusions and key proof ideas, preserving textbook notation and numbering. Reuse conversation context; consult local materials or selected snapshot entries only as needed. Read existing chapter titles/sections from the lookup JSON documents[STUDY_NOTES.md] entry to avoid duplication and preserve conventions. Distinguish a preview from material already studied. Return only this chapter body, without repeating its title or adding application section markers. Use sectionTitle if supplied; otherwise reuse the existing title for this chapter. The application saves the section and creates a read-only reference.',
         available:{trees:Object.keys(book.trees).length,nodes:Object.keys(book.nodes).length,references:Object.keys(book.references).length},
       };
       return {prompt,dispose};
