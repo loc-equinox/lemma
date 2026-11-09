@@ -1,7 +1,8 @@
+import { documentFile, isDocumentJob, type DocumentOutput } from '../shared/documents';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
-import { jsonSchema, teachingRules } from './protocol';
+import { jsonSchema, teachingRules, documentJsonSchema } from './protocol';
 import type { GenerationContext, Provider } from './engine';
 import { resolveGeneration, type ModelCatalog, type ModelOption } from '../shared/models';
 import type { Output } from '../shared/types';
@@ -84,7 +85,7 @@ export class CodexProvider implements Provider {
       return { models, defaultModel, defaultEffort };
     } finally { rpc.close(); this.catalogProcesses.delete(rpc); }
   }
-  async generate(ctx: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void): Promise<Output> {
+  async generate(ctx: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void): Promise<Output | DocumentOutput> {
     const { book, job, ids, parentId } = ctx;
     const generation = resolveGeneration(await this.listModels(book.directory), book.generation);
     if (signal.aborted) throw new Error('Generation interrupted');
@@ -102,19 +103,29 @@ export class CodexProvider implements Provider {
     if (signal.aborted) throw new Error('Generation interrupted');
     const { rpc, threadId } = session;
     const r = book.routes[job.routeId];
-    const prompt = {
+    const documentTask = isDocumentJob(job);
+    const prompt = documentTask ? {
+      task: job.request, jobId:job.id, file:documentFile(job.kind as 'notes'|'progress'), sectionTitle:job.sectionTitle || null,
+      instruction: job.kind === 'progress'
+        ? 'Update the complete STUDY_PROGRESS.md using existing notes and the authoritative reading snapshot. Preserve useful existing semantic history and user conventions. Distinguish completed steps, current study, prepared-but-unread content, and unresolved questions. State the next semantic study point without depending on canvas node IDs. Return Markdown content only through the schema. The application saves the file; do not write files yourself.'
+        : 'Prepare a coherent reference summary for the requested chapter/topic. Read the local textbook as needed. Include important definitions, theorem hypotheses and conclusions, key proof ideas, and relevant learning progress. Distinguish an upcoming chapter preview from material already studied. This is a reference document, so the one-concept-per-step limit does not apply. Return only this chapter section body, without repeating its title as a heading and without application section markers. Preserve notation and numbering; avoid duplicating other chapters. The application saves the section to STUDY_NOTES.md and displays the exact same content as a read-only canvas reference. Use the requested sectionTitle as title when supplied. Otherwise reuse the existing application section title for the same chapter/topic when present, so a subsequent update replaces that section. Do not write files yourself.',
+      canvasEpoch:book.epoch, studyDocuments:ctx.documents || [], activeTreeId:book.activeTreeId,
+      trees:Object.values(book.trees), routes:Object.values(book.routes), nodes:Object.values(book.nodes), questions:Object.values(book.questions),
+    } : {
       instruction: 'Produce the next requested conceptual steps. Read relevant materials before explaining. Do not write files. Copy allocated IDs and relationships exactly. For the final step in this batch use nextId:null (a future successor is not allocated). continuation must equal the route returnTo only when finished, otherwise null. Generate all slots unless the task ends earlier. The initial two steps must have distinct conceptual purposes. Do not repeat existing steps.',
+      studyDocuments:ctx.documents || [],
       canvasEpoch: book.epoch, jobId: job.id, routeId: r.id, startIndex: job.start,
       allocatedIds: ids, firstParentId: parentId, returnTo: r.returnTo,
       task: book.trees[r.treeId].prompt, question: r.questionId ? book.questions[r.questionId] : null,
+      referenceSource: r.questionId ? book.references[book.questions[r.questionId].nodeId] || null : null,
       currentReadingPosition: book.trees[r.treeId].cursor,
       routes: Object.values(book.routes).filter(x => x.treeId === r.treeId),
       nodes: Object.values(book.nodes).filter(n => book.routes[n.routeId].treeId === r.treeId),
       format: 'One meaningful conceptual step per node; Markdown and LaTeX. revisions normally empty. Never revise completed or current nodes. Use exact jobId and routeId.',
     };
-    return await new Promise<Output>((resolve, reject) => {
+    return await new Promise<Output | DocumentOutput>((resolve, reject) => {
       let turnId: string | undefined, finalText = '', settled = false, abortTimer: NodeJS.Timeout | undefined;
-      const finish = (error?: Error, output?: Output) => {
+      const finish = (error?: Error, output?: Output | DocumentOutput) => {
         if (settled) return; settled = true; clearTimeout(timeout); clearTimeout(abortTimer);
         rpc.off('notification', onEvent); rpc.off('disconnected', onDisconnect); signal.removeEventListener('abort', abort);
         error ? reject(error) : resolve(output!);
@@ -138,7 +149,7 @@ export class CodexProvider implements Provider {
       };
       const timeout = setTimeout(() => { this.sessions.delete(book.id); rpc.close(); finish(new Error('Generation timed out after 5 minutes. Retry to continue.')); }, 300000);
       rpc.on('notification', onEvent); rpc.on('disconnected', onDisconnect); signal.addEventListener('abort', abort, { once: true });
-      rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: JSON.stringify(prompt), text_elements: [] }], outputSchema: jsonSchema }).then(res => { turnId = res.turn.id; if (signal.aborted) abort(); }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
+      rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: JSON.stringify(prompt), text_elements: [] }], outputSchema: documentTask ? documentJsonSchema : jsonSchema }).then(res => { turnId = res.turn.id; if (signal.aborted) abort(); }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
     });
   }
   close() { for (const s of this.sessions.values()) s.rpc.close(); this.sessions.clear(); for (const rpc of this.catalogProcesses) rpc.close(); this.catalogProcesses.clear(); this.catalogs.clear(); }

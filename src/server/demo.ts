@@ -1,9 +1,18 @@
+import { isDocumentJob, documentFile, type DocumentOutput } from '../shared/documents';
 import type { Provider, GenerationContext } from './engine';
 import type { Output } from '../shared/types';
 export class DemoProvider implements Provider {
-  async generate({ book, job, ids, parentId }: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void): Promise<Output> {
+  async generate({ book, job, ids, parentId }: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void): Promise<Output | DocumentOutput> {
     thread(book.threadId || `demo-${book.id}`); progress('Preparing a deterministic demonstration…');
     await new Promise<void>((resolve, reject) => { const t = setTimeout(resolve, 700); signal.addEventListener('abort', () => { clearTimeout(t); reject(new Error('Interrupted')); }, { once: true }); });
+    if (isDocumentJob(job)) return {
+      jobId:job.id,file:documentFile(job.kind),title:job.sectionTitle || (job.kind==='progress'?'Study progress':'Convergence'),
+      content:job.kind==='progress' ? '# Study progress\n\nThis is a deterministic demo. Prepared steps are not necessarily completed.\n\nNext: continue from the saved reading position.' : String.raw`A sequence converges to $L$ when every tolerance eventually contains its tail.
+
+$$\forall \varepsilon>0\;\exists N\;\forall n\ge N: |a_n-L|<\varepsilon.$$
+
+For $a_n=1/n$, choose $N>1/\varepsilon$. This is fixed demo reference content.`
+    };
     const r = book.routes[job.routeId];
     const question = r.questionId ? book.questions[r.questionId] : null;
     const titles = question ? ['Why the definition matters', 'Connecting the idea back'] : ['A precise definition of convergence', 'Choosing the right threshold', 'Completing the argument', 'What the proof establishes'];

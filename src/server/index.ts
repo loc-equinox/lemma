@@ -1,3 +1,4 @@
+import { instructionKind } from '../shared/documents';
 import express from 'express';
 import { resolve, sep } from 'node:path';
 import { existsSync, realpathSync } from 'node:fs';
@@ -48,7 +49,9 @@ app.post('/api/books/:bookId/:operation', (req,res) => {
   const b = req.params.bookId;
   const body = req.body || {};
   switch(req.params.operation) {
-    case 'trees': { const p = z.object({ prompt:text, actionId:action }).parse(body); engine.newTree(b,p.prompt,p.actionId); break; }
+    case 'trees': { const p = z.object({ prompt:text, actionId:action }).parse(body); const kind=instructionKind(p.prompt); if(kind)engine.document(b,kind,p.prompt,p.actionId);else engine.newTree(b,p.prompt,p.actionId); break; }
+    case 'documents': { const p=z.object({kind:z.enum(['notes','progress']),request:text,actionId:action,sectionTitle:z.string().trim().max(200).optional()}).parse(body); engine.document(b,p.kind,p.request,p.actionId,p.sectionTitle); break; }
+    case 'import-document': { const p=z.object({file:z.enum(['STUDY_NOTES.md','STUDY_PROGRESS.md'])}).parse(body); engine.importDocument(b,p.file); break; }
     case 'continue': { const p = z.object({ nodeId:text, epoch:z.number().int(), actionId:action }).parse(body); engine.continue(b,p.nodeId,p.epoch,p.actionId); break; }
     case 'comments': { const p = z.object({ nodeId:text, text, actionId:action }).parse(body); engine.comment(b,p.nodeId,p.text,p.actionId); break; }
     case 'enter': { const p = z.object({ questionId:text, actionId:action }).parse(body); engine.enter(b,p.questionId,p.actionId); break; }

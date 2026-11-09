@@ -46,6 +46,32 @@ The default development command uses Vite middleware and live reload. `npm start
 - Revised unread content gets a new version. Old versions remain accessible from the revised step; a displayed old version stays visible with an update notice.
 - **Clear map** removes the current book’s graph and progress, while preserving its material folder and Codex thread.
 
+## Study progress, chapter notes, and references
+
+The **Task** selector beside the prompt supports **Learn**, **Update progress**, and **Chapter notes**. Enter your instruction and submit. For chapter notes, supplying a stable **Chapter / topic** title updates that same section on later requests.
+
+You can also submit explicit commands in the ordinary prompt:
+
+```text
+/progress 记录目前学习到哪里、尚未解决的问题以及下次从哪里继续。
+/notes 整理第三章的重要定义、定理条件和证明思路，作为章节参考。
+请更新学习进度
+整理这一章的重要结论
+```
+
+Explicit update/save requests naming `STUDY_PROGRESS.md` or `STUDY_NOTES.md` are also recognized. Use the Task selector for instructions whose intent is ambiguous.
+
+- **Progress** updates `STUDY_PROGRESS.md` in the book directory. The request includes existing progress and notes plus actual reading state; prepared content must be distinguished from completed reading.
+- **Chapter notes** save a managed chapter section in `STUDY_NOTES.md`. Existing CLI notes and other chapters remain in the file. Reuse the chapter title to replace that managed section.
+- Saved content appears as a gold **Reference / Read only** node with rendered/source views. It has no completion state or Continue action. Asking a question from a reference creates an explanation that returns to your saved reading position; with no active tree it creates a standalone question route.
+- Each subsequent Codex generation receives both latest study documents as context. The Codex tool sandbox stays read-only; the application performs the narrowly scoped file writes after validating the result.
+- **Open saved notes / Open saved progress** reloads existing files into reference nodes without generating AI content. This also works after Clear. CLI changes are picked up on subsequent generation or explicit reload.
+- Clear removes canvas references and cancels outstanding document tasks, while preserving saved Markdown files. Existing references are snapshots: a displayed older version stays readable with an update notice.
+
+File edits are checked against the version read at generation time. Conflicts fail visibly and can be retried against the latest file. Writes use a temporary file and atomic rename; before/after document bodies are retained in the application database's `document_writes` journal, including across Clear. The journal also recovers a completed file write if the application stopped before saving its canvas reference. This is separate from the temporary canvas data. Only regular files with the two specified names are supported; symlink targets are rejected and each document is limited to 512 KiB.
+
+Additional verification: `npx tsx scripts/notes-browser-test.ts` against an isolated demo server on port 4320, and `npx tsx scripts/notes-live-test.ts` for actual Codex generation using temporary fixture materials. Neither script writes study documents in your registered book directory.
+
 ## Storage and configuration
 
 SQLite workspace state lives in `.data/workspace.sqlite` by default, outside material folders. Browser refresh and application restart retain graph contents, questions, revisions, reading positions, and thread associations. Interrupted jobs recover as retryable failures. Stop the server before copying its SQLite database and associated WAL files for a backup.

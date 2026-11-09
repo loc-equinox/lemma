@@ -30,3 +30,14 @@ Verification artifacts are local and ignored by Git: `.data/screenshots/desktop.
 ## Scope and practical limits
 
 This is a local, single-user desktop product. There is no hosting, collaboration, or cross-device sync. PDF extraction depends on tools available to the installed Codex runtime; Markdown/plain text is the most reliable material format. Generation latency follows the user's configured model and reasoning settings; unfinished requests time out after five minutes with a retry action. Demo content is fixed and is not an arbitrary mathematics tutor.
+
+
+## Durable study context update
+
+Implemented GUI tasks for `STUDY_PROGRESS.md` and chapter sections in `STUDY_NOTES.md`, with explicit task selection and `/progress` / `/notes` commands. Both documents are included as fresh context in subsequent Codex generations. The backend performs validated writes to these two names; Codex remains read-only.
+
+Saved documents produce a separate read-only reference node type with source rendering/copying and version history. References do not participate in completion or reading navigation. Questions on references return to the saved active position; a reference-only workspace can start an independent explanation. Clear removes references and pending writes while retaining saved files; explicit reload restores them without model generation.
+
+Verification: 27 automated tests passed, including document conflict detection, retained file revisions, chapter preservation, late cancelled results, interrupted-commit recovery, and priority over speculation. A dedicated Chrome workflow verified saving both files, reference viewing/questions, unchanged cursor, Clear/reopen and refresh. Actual Codex generated notes and progress in isolated temporary materials, then used the saved context in subsequent learning on the same thread. Evidence: `.data/notes-live-*/result.json`; browser captures: `.data/screenshots/chapter-reference.png` and `reference-map.png`.
+
+The application retains before/after document versions in its SQLite journal across Clear. Study files must be regular files, each at most 512 KiB. Stable chapter titles identify sections to replace; preexisting CLI text outside managed sections remains intact.

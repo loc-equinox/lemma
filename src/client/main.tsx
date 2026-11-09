@@ -1,3 +1,5 @@
+import { ReferenceReader } from './ReferenceReader';
+import { instructionKind, isDocumentJob } from '../shared/documents';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, type Node, type Edge } from '@xyflow/react';
@@ -17,7 +19,9 @@ async function request(path: string, body?: unknown) {
 function graph(book: Book, selected: string | null): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [], edges: Edge[] = [];
   const current = nodeAt(book,currentTree(book)?.cursor || null)?.id;
-  let baseY = 0;
+  const references=Object.values(book.references || {}).filter(r=>!r.supersededBy || Object.values(book.questions).some(q=>q.nodeId===r.id));
+  references.forEach((ref,i)=>nodes.push({id:ref.id,position:{x:(i%3)*280,y:Math.floor(i/3)*165},data:{label:<><span className="node-kicker">REFERENCE <span>{ref.supersededBy?'Superseded':'Read only'}</span></span><strong>{ref.title}</strong><small>{ref.file}</small></>},className:`step-node reference-node ${selected===ref.id?'selected':''}`}));
+  let baseY = references.length ? Math.ceil(references.length/3)*165+60 : 0;
   for (const tree of Object.values(book.trees)) {
     const routes = Object.values(book.routes).filter(r=>r.treeId === tree.id);
     const positions = new Map<string,{x:number;y:number}>();
@@ -53,6 +57,9 @@ function App() {
   const [name,setName] = useState(''); const [directory,setDirectory] = useState('');
   const [clearConfirm,setClearConfirm] = useState(false);
   const [follow,setFollow] = useState(false);
+  const [taskMode,setTaskMode] = useState<'learn'|'notes'|'progress'>('learn');
+  const [sectionTitle,setSectionTitle] = useState('');
+  const requestKind=taskMode==='learn' ? instructionKind(prompt)||'learn' : taskMode;
   async function refresh() { const s = await request('state'); setState(s); return s as State; }
   useEffect(()=>{
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,11 +74,16 @@ function App() {
   const tree = book && currentTree(book);
   const current = book && nodeAt(book,tree?.cursor || null);
   const node = selected && book ? book.nodes[selected] : undefined;
+  const reference = selected && book ? book.references?.[selected] : undefined;
+  const readerOpen=!!node || !!reference;
+  const references=book?Object.values(book.references || {}).filter(r=>!r.supersededBy):[];
   const activeJobs = book ? Object.values(book.jobs).filter(j=>['running','queued'].includes(j.status)) : [];
-  const failedJobs = book ? Object.values(book.jobs).filter(j=>j.status==='failed' && book.routes[j.routeId]?.nodeIds.length===j.start && !Object.values(book.jobs).some(k=>k.id!==j.id && k.routeId===j.routeId && k.start===j.start && ['queued','running','completed'].includes(k.status))) : [];
+  const failedJobs = book ? Object.values(book.jobs).filter(j=>j.status==='failed' && (isDocumentJob(j)
+    ? !Object.values(book.jobs).some(k=>k.id!==j.id&&k.kind===j.kind&&k.request===j.request&&k.sectionTitle===j.sectionTitle&&k.createdAt>j.createdAt&&['queued','running','completed'].includes(k.status))
+    : book.routes[j.routeId]?.nodeIds.length===j.start && !Object.values(book.jobs).some(k=>k.id!==j.id&&k.routeId===j.routeId&&k.start===j.start&&['queued','running','completed'].includes(k.status)))) : [];
   const data = useMemo(()=>book ? graph(book,selected) : {nodes:[],edges:[]},[book,selected]);
   useEffect(()=>{ if (follow && current) { setSelected(current.id); setFollow(false); } },[follow,current?.id]);
-  useEffect(()=>{setSelected(null);setComment('');setFollow(false);},[book?.id]);
+  useEffect(()=>{setSelected(null);setComment('');setFollow(false);setTaskMode('learn');setSectionTitle('');},[book?.id]);
   async function run(fn:()=>Promise<unknown>) { setBusy(true); setError(''); try { await fn(); await refresh(); } catch(e) {setError((e as Error).message);} finally {setBusy(false);} }
   const act = (operation: string, body: object = {}) => request(`books/${book!.id}/${operation}`,{...body,actionId:uid()});
   function navigate(updated: Book) {
@@ -105,12 +117,13 @@ function App() {
       {error&&<div role="alert" className="error-banner">{error}<button aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
       {!book ? <section className="welcome"><div className="eyebrow">A SPACE TO THINK</div><h1>Understand mathematics.<br/><em>One step at a time.</em></h1><p>Bring a book, follow an idea, and ask questions along the way.<br/>Your learning path takes shape as you read.</p><button className="primary" onClick={()=>setShowAdd(true)}>Add your first book <span>＋</span></button><div className="welcome-preview"><span>01<br/><b>Understand</b></span><i>→</i><span>02<br/><b>Question</b></span><i>→</i><span>03<br/><b>Connect</b></span></div></section> : <>
       <div className="workspace-heading"><div><div className="eyebrow">LEARNING MAP</div><h1>{book.name}</h1><p>{Object.keys(book.trees).length ? 'Follow your curiosity. Each node is one conceptual step.' : 'Every idea starts with a question.'}</p></div>{tree&&<button className="resume-button" onClick={openCurrent}>{current ? `Reading ${label(book,current)} ↗` : tree.cursor ? 'Preparing your step…' : 'Learning task complete ✓'}</button>}</div>
-      <div className={`workspace-body ${node ? 'has-reader' : ''}`}>
-        <section className="map-area" aria-label="Learning graph" inert={!!node && readerExpanded} aria-hidden={!!node && readerExpanded}>
+      <div className={`workspace-body ${readerOpen ? 'has-reader' : ''}`}>
+        <section className="map-area" aria-label="Learning graph" inert={readerOpen && readerExpanded} aria-hidden={readerOpen && readerExpanded}>
           {!!Object.keys(book.trees).length&&<div className="tree-switcher">{Object.values(book.trees).map(t=><button key={t.id} className={t.id===tree?.id?'active':''} title={t.prompt} disabled={busy} onClick={()=>run(async()=>{navigate(await act('resume',{treeId:t.id}));})}>{t.id===tree?.id?'● ':''}{t.prompt}</button>)}</div>}
-          {data.nodes.length ? <ReactFlow key={book.id} nodes={data.nodes} edges={data.edges} fitView fitViewOptions={{padding:.3,maxZoom:1}} minZoom={.15} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} onNodeClick={(_e,n)=>{if(book.nodes[n.id]){setSelected(n.id);setComment('');}}} proOptions={{hideAttribution:true}}><Background gap={22} size={1} color="#d6d9d1"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor={n=>n.className?.includes('studying')?'#44785d':'#d9ded6'}/></ReactFlow> : <div className="empty-map"><span className="empty-mark">∫</span><h2>A new path through your book</h2><p>Ask about a definition, explore a theorem,<br/>or work through a proof below.</p><button onClick={()=>setPrompt('Explain a central definition from this book, one conceptual step at a time.')}>Explore a definition ↗</button></div>}
+          {data.nodes.length ? <ReactFlow key={book.id} nodes={data.nodes} edges={data.edges} fitView fitViewOptions={{padding:.3,maxZoom:1}} minZoom={.15} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} onNodeClick={(_e,n)=>{if(book.nodes[n.id] || book.references?.[n.id]){setSelected(n.id);setComment('');}}} proOptions={{hideAttribution:true}}><Background gap={22} size={1} color="#d6d9d1"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor={n=>n.className?.includes('studying')?'#44785d':'#d9ded6'}/></ReactFlow> : <div className="empty-map"><span className="empty-mark">∫</span><h2>A new path through your book</h2><p>Ask about a definition, explore a theorem,<br/>or work through a proof below.</p><button onClick={()=>setPrompt('Explain a central definition from this book, one conceptual step at a time.')}>Explore a definition ↗</button></div>}
           <div className="map-legend"><span><i className="green"/>Studying</span><span><i/>Ready</span><span><i className="complete"/>Completed</span><span className="legend-hint">Scroll to zoom · Drag to pan</span></div>
         </section>
+        {reference&&<ReferenceReader book={book} node={reference} expanded={readerExpanded} busy={busy} comment={comment} onCommentChange={setComment} onClose={()=>setSelected(null)} onLayout={toggleReaderLayout} onOpen={setSelected} currentId={current?.id} onEnter={questionId=>run(async()=>navigate(await act('enter',{questionId})))} onAsk={()=>run(async()=>{await act('comments',{nodeId:reference.id,text:comment});setComment('');})}/>}
         {node&&<aside className={`reader ${readerExpanded ? 'reader-expanded' : ''}`} aria-label="Step reader"><div className="reader-top"><span>{label(book,node)} <i> / {node.completed?'Completed':isCurrent?'Studying':'Preview'}</i></span><div className="reader-actions"><button className="reader-layout-toggle" aria-label={readerExpanded ? 'Show reader beside map' : 'Expand reader over map'} aria-pressed={readerExpanded} onClick={toggleReaderLayout}>{readerExpanded ? 'Side by side' : 'Expand reader'} <span aria-hidden="true">⤢</span></button><button className="reader-close" aria-label="Close reader" onClick={()=>setSelected(null)}>Back to map <span aria-hidden="true">×</span></button></div></div><article><div className="reader-content">
           {node.supersededBy&&<div className="revision-notice">This version has been superseded. <button onClick={()=>setSelected(node.supersededBy)}>Read the updated step →</button></div>}
           {node.version>1&&<details className="version-history"><summary>Revised · version {node.version}</summary>{Object.values(book.nodes).filter(n=>n.routeId===node.routeId&&n.index===node.index&&n.id!==node.id).map(n=><button key={n.id} onClick={()=>setSelected(n.id)}>View version {n.version}{n.supersededBy?' (superseded)':''}</button>)}</details>}
@@ -120,6 +133,14 @@ function App() {
           </div></article><div className="reader-footer">{isCurrent&&!node.supersededBy ? <><small>{waitingQuestion?'Your question has an explanation to enter.':nextNode?`${returnStep?'Return to':'Up next'} ${label(book,nextNode)} · ${nextNode.title}`:next?'The next step will be prepared for you.':'You have reached the end of this learning task.'}</small><button className="primary" disabled={busy||waitingQuestion} onClick={()=>run(async()=>{navigate(await act('continue',{nodeId:node.id,epoch:tree!.cursorEpoch}));})}>{nextNode?`${returnStep?'Return to':'Continue to'} ${label(book,nextNode)}`:next?'Continue':'Complete this task'} <span>→</span></button></> : <><small>Viewing a step leaves your reading position unchanged.</small><button className="primary" onClick={openCurrent}>{current?'Back to current step':'Back to learning route'} <span>↗</span></button></>}</div></aside>}
       </div>
       <div className="bottom-area">
+        <div className="study-document-tools">
+          <label>Task <select aria-label="Task type" value={taskMode} onChange={e=>setTaskMode(e.target.value as typeof taskMode)}><option value="learn">Learn</option><option value="progress">Update progress</option><option value="notes">Chapter notes</option></select></label>
+          {requestKind==='notes'&&<input aria-label="Chapter or topic" placeholder="Chapter / topic (same title updates it)" value={sectionTitle} onChange={e=>setSectionTitle(e.target.value)} maxLength={200}/>}
+          <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_NOTES.md'}))}>Open saved notes</button>
+          <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_PROGRESS.md'}))}>Open saved progress</button>
+        </div>
+        {references.length>0&&<nav className="reference-links" aria-label="Saved references">{references.map(ref=><button key={ref.id} title={ref.file} onClick={()=>{setSelected(ref.id);setComment('');}}>▧ {ref.title}</button>)}</nav>}
+
         {state?.provider==='codex'&&<GenerationControls key={book.id} bookId={book.id} settings={book.generation} disabled={busy} active={activeJobs.length>0} onSave={async settings=>{
           setBusy(true);
           try {
@@ -129,11 +150,11 @@ function App() {
         }}/>}
         <div role="status" className="generation-status">{activeJobs.length?<><span className="spinner"/>{activeJobs.find(j=>j.status==='running')?.progress || 'Your request is queued…'}</>:tree&&!tree.cursor?<><span className="connection-dot"/>Learning task complete. Start another idea whenever you’re ready.</>:<><span className="connection-dot"/>All changes saved. Your next question is welcome.</>}</div>
         {failedJobs.map(j=><div className="job-error" key={j.id}><span>Generation paused: {j.error}</span><button disabled={busy} onClick={()=>run(()=>act('retry',{jobId:j.id}))}>Retry</button></div>)}
-        <form className="prompt-form" onSubmit={e=>{e.preventDefault();run(async()=>{await act('trees',{prompt});setPrompt('');setSelected(null);});}}><span className="prompt-symbol">＋</span><textarea aria-label="New learning prompt" placeholder="What would you like to understand? Start a new learning tree…" value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={12000} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}/><button className="primary" disabled={busy||!prompt.trim()}>Start learning <span>↑</span></button></form><div className="prompt-hint">One idea at a time. Ask for a definition, a proof, or a worked example.</div>
+        <form className="prompt-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(requestKind==='learn'){await act('trees',{prompt});setSelected(null);}else{await act('documents',{kind:requestKind,request:prompt,sectionTitle});}setPrompt('');});}}><span className="prompt-symbol">＋</span><textarea aria-label="New learning prompt" placeholder={requestKind==='learn'?"What would you like to understand? Start a new learning tree…":requestKind==='progress'?"Describe what to record in STUDY_PROGRESS.md…":"Describe the chapter conclusions to save in STUDY_NOTES.md…"} value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={12000} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}/><button className="primary" disabled={busy||!prompt.trim()}>{requestKind==='learn'?'Start learning':requestKind==='notes'?'Save chapter notes':'Update progress'} <span>↑</span></button></form><div className="prompt-hint">{requestKind==='learn'?'One idea at a time. Use /notes or /progress to save study context.':`Saves ${requestKind==='notes'?'STUDY_NOTES.md':'STUDY_PROGRESS.md'} in your book folder and adds a read-only reference. Your reading position stays unchanged.`}</div>
       </div></>}
     </main>
     {showAdd&&<div className="modal-backdrop"><form className="modal" role="dialog" aria-modal="true" aria-labelledby="add-title" onSubmit={e=>{e.preventDefault();run(async()=>{const b=await request('books',{name,directory});setBookId(b.id);localStorage.setItem('lemma-book',b.id);setShowAdd(false);setName('');setDirectory('');});}}><button type="button" className="modal-close" aria-label="Close dialog" onClick={()=>setShowAdd(false)}>×</button><div className="eyebrow">YOUR LIBRARY</div><h2 id="add-title">Add a book</h2><p>Connect a local folder containing your textbook, notes, and teaching instructions.</p><label htmlFor="book-name">Book name</label><input id="book-name" autoFocus value={name} onChange={e=>setName(e.target.value)} required maxLength={100} placeholder="Real Analysis"/><label htmlFor="book-directory">Material directory</label><input id="book-directory" value={directory} onChange={e=>setDirectory(e.target.value)} required placeholder="/Users/you/Books/Real Analysis"/><small>The folder stays in place. Codex reads its materials using your existing local login.</small>{error&&<p role="alert" className="inline-error">{error}</p>}<button className="primary" disabled={busy}>Add book <span>→</span></button></form></div>}
-    {clearConfirm&&<div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true"><h2>Clear this map?</h2><p>This removes the current book’s trees, questions, and reading progress. Your book folder and Codex conversation are preserved.</p><div className="modal-actions"><button onClick={()=>setClearConfirm(false)}>Keep learning</button><button className="danger" disabled={busy} onClick={()=>run(async()=>{await act('clear');setClearConfirm(false);setSelected(null);setFollow(false);})}>Clear map</button></div></div></div>}
+    {clearConfirm&&<div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true"><h2>Clear this map?</h2><p>This removes the current book’s trees, questions, and reading progress. Your book folder, saved study documents, and Codex conversation are preserved.</p><div className="modal-actions"><button onClick={()=>setClearConfirm(false)}>Keep learning</button><button className="danger" disabled={busy} onClick={()=>run(async()=>{await act('clear');setClearConfirm(false);setSelected(null);setFollow(false);})}>Clear map</button></div></div></div>}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);
