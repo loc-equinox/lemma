@@ -28,8 +28,8 @@ try{
  assert.match(readFileSync(join(material,'STUDY_PROGRESS.md'),'utf8'),/Study progress/);b=(await state()).books[bookId];assert.equal(JSON.stringify(b.trees[b.activeTreeId].cursor),cursor);
  await page.locator(`.reference-node[data-id="${ref.id}"]`).click();mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/chapter-reference.png'});
  await page.getByRole('button',{name:'Close reader'}).click();await page.screenshot({path:'.data/screenshots/reference-map.png'});
+ await page.reload();await page.locator('.reference-node').filter({hasText:'Chapter 1 — Limits'}).first().waitFor();
  await page.getByRole('button',{name:'Clear map',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Clear map',exact:true}).click();await waitFor(s=>Object.keys(s.books[bookId].references).length===0);
- await page.getByRole('button',{name:'Open saved notes',exact:true}).click();await waitFor(s=>Object.keys(s.books[bookId].references).length>0);assert.equal(Object.keys((await state()).books[bookId].trees).length,0);
- await page.reload();await page.locator('.reference-node').filter({hasText:'Chapter 1 — Limits'}).waitFor();assert.deepEqual(errors,[]);
- console.log('Chapter notes, progress commands, reference questions, unchanged cursor, Clear/reopen and refresh passed.');
+ await page.reload();await page.getByRole('heading',{name:'A new path through your book'}).waitFor();assert.equal(await page.locator('.reference-node').count(),0);assert.deepEqual(errors,[]);
+ console.log('Chapter notes, progress commands, reference questions, unchanged cursor, refresh and Clear persistence passed.');
 }catch(e){mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/notes-failure.png'});console.error(errors);throw e;}finally{await browser.close();}

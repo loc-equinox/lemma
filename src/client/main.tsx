@@ -136,8 +136,6 @@ function App() {
         <div className="study-document-tools">
           <label>Task <select aria-label="Task type" value={taskMode} onChange={e=>setTaskMode(e.target.value as typeof taskMode)}><option value="learn">Learn</option><option value="progress">Update progress</option><option value="notes">Chapter notes</option></select></label>
           {requestKind==='notes'&&<input aria-label="Chapter or topic" placeholder="Chapter / topic (same title updates it)" value={sectionTitle} onChange={e=>setSectionTitle(e.target.value)} maxLength={200}/>}
-          <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_NOTES.md'}))}>Open saved notes</button>
-          <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_PROGRESS.md'}))}>Open saved progress</button>
         </div>
 
         {state?.provider==='codex'&&<GenerationControls key={book.id} bookId={book.id} settings={book.generation} disabled={busy} active={activeJobs.length>0} onSave={async settings=>{

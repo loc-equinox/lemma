@@ -64,7 +64,6 @@
 .study-document-tools label{display:flex;align-items:center;gap:8px}
 .study-document-tools select,.study-document-tools input{border:1px solid #dce3d2;border-radius:6px;padding:7px 9px;background:#fbfcf6;color:#4c6541;font:inherit}
 .study-document-tools input{flex:1;min-width:160px;max-width:360px}
-.study-document-tools button{font-size:10px;padding:7px 9px;background:#f8faf3}
 .step-node.reference-node{background:#fcf8ec!important;border-color:#d9cba8!important}
 .step-node.reference-node .node-kicker{color:#967d49}
 .reference-file{font:11px/1.6 ui-monospace,monospace;color:#9a8559;margin:0 0 15px;overflow-wrap:anywhere}
