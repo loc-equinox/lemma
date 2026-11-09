@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, type Node, type Edge } from '@xyflow/react';
 import { StepContent } from './StepContent';
+import { GenerationControls } from './GenerationControls';
 import type { Book, Step, Workspace } from '../shared/types';
 import { currentTree, nodeAt, label, successor } from '../shared/types';
 import '@xyflow/react/dist/style.css';
@@ -113,6 +114,13 @@ function App() {
           </article><div className="reader-footer">{isCurrent&&!node.supersededBy ? <><small>{waitingQuestion?'Your question has an explanation to enter.':nextNode?`${returnStep?'Return to':'Up next'} ${label(book,nextNode)} · ${nextNode.title}`:next?'The next step will be prepared for you.':'You have reached the end of this learning task.'}</small><button className="primary" disabled={busy||waitingQuestion} onClick={()=>run(async()=>{navigate(await act('continue',{nodeId:node.id,epoch:tree!.cursorEpoch}));})}>{nextNode?`${returnStep?'Return to':'Continue to'} ${label(book,nextNode)}`:next?'Continue':'Complete this task'} <span>→</span></button></> : <><small>Viewing a step leaves your reading position unchanged.</small><button className="primary" onClick={openCurrent}>{current?'Back to current step':'Back to learning route'} <span>↗</span></button></>}</div></aside>}
       </div>
       <div className="bottom-area">
+        {state?.provider==='codex'&&<GenerationControls key={book.id} bookId={book.id} settings={book.generation} disabled={busy} active={activeJobs.length>0} onSave={async settings=>{
+          setBusy(true);
+          try {
+            const updated=await request(`books/${book.id}/generation`,settings);
+            setState(previous=>previous?{...previous,books:{...previous.books,[updated.id]:updated}}:previous);
+          } finally { setBusy(false); }
+        }}/>}
         <div role="status" className="generation-status">{activeJobs.length?<><span className="spinner"/>{activeJobs.find(j=>j.status==='running')?.progress || 'Your request is queued…'}</>:tree&&!tree.cursor?<><span className="connection-dot"/>Learning task complete. Start another idea whenever you’re ready.</>:<><span className="connection-dot"/>All changes saved. Your next question is welcome.</>}</div>
         {failedJobs.map(j=><div className="job-error" key={j.id}><span>Generation paused: {j.error}</span><button disabled={busy} onClick={()=>run(()=>act('retry',{jobId:j.id}))}>Retry</button></div>)}
         <form className="prompt-form" onSubmit={e=>{e.preventDefault();run(async()=>{await act('trees',{prompt});setPrompt('');setSelected(null);});}}><span className="prompt-symbol">＋</span><textarea aria-label="New learning prompt" placeholder="What would you like to understand? Start a new learning tree…" value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={12000} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}/><button className="primary" disabled={busy||!prompt.trim()}>Start learning <span>↑</span></button></form><div className="prompt-hint">One idea at a time. Ask for a definition, a proof, or a worked example.</div>

@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import { jsonSchema, teachingRules } from './protocol';
 import type { GenerationContext, Provider } from './engine';
+import { resolveGeneration, type ModelCatalog, type ModelOption } from '../shared/models';
 import type { Output } from '../shared/types';
 export class Rpc extends EventEmitter {
   child: ChildProcessWithoutNullStreams;
@@ -46,15 +47,54 @@ export class Rpc extends EventEmitter {
 }
 export class CodexProvider implements Provider {
   sessions = new Map<string, { rpc: Rpc; threadId: string }>();
+  catalogs = new Map<string, { expires: number; value: Promise<ModelCatalog> }>();
+  catalogProcesses = new Set<Rpc>();
+  listModels(directory: string): Promise<ModelCatalog> {
+    const cached = this.catalogs.get(directory);
+    if (cached && cached.expires > Date.now()) return cached.value;
+    const value = this.readCatalog(directory);
+    this.catalogs.set(directory, { expires: Date.now() + 60000, value });
+    void value.catch(() => { if (this.catalogs.get(directory)?.value === value) this.catalogs.delete(directory); });
+    return value;
+  }
+  private async readCatalog(directory: string): Promise<ModelCatalog> {
+    const rpc = new Rpc(); this.catalogProcesses.add(rpc);
+    try {
+      await rpc.initialize();
+      const { config } = await rpc.call('config/read', { cwd: directory, includeLayers: false });
+      const models: ModelOption[] = [];
+      let cursor: string | null = null, recommended: string | null = null;
+      const seen = new Set<string>();
+      do {
+        const page = await rpc.call('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) });
+        for (const m of page.data) {
+          if (m.hidden || (m.inputModalities && !m.inputModalities.includes('text'))) continue;
+          if (m.isDefault) recommended = m.model;
+          if (!models.some(x => x.model === m.model)) models.push({ model: m.model, displayName: m.displayName, description: m.description || '', defaultReasoningEffort: m.defaultReasoningEffort, supportedReasoningEfforts: m.supportedReasoningEfforts });
+        }
+        cursor = page.nextCursor;
+        if (cursor && seen.has(cursor)) throw new Error('Codex returned a repeated model-list cursor.');
+        if (cursor) seen.add(cursor);
+      } while (cursor);
+      const defaultModel = process.env.CODEX_MODEL || config.model || recommended || models[0]?.model || null;
+      const option = models.find(m => m.model === defaultModel);
+      const configuredEffort = config.model_reasoning_effort;
+      const defaultEffort = option && !option.supportedReasoningEfforts.some(e => e.reasoningEffort === configuredEffort)
+        ? option.defaultReasoningEffort : configuredEffort || option?.defaultReasoningEffort || null;
+      return { models, defaultModel, defaultEffort };
+    } finally { rpc.close(); this.catalogProcesses.delete(rpc); }
+  }
   async generate(ctx: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void): Promise<Output> {
     const { book, job, ids, parentId } = ctx;
+    const generation = resolveGeneration(await this.listModels(book.directory), book.generation);
+    if (signal.aborted) throw new Error('Generation interrupted');
     let session = this.sessions.get(book.id);
     if (session?.rpc.dead) { this.sessions.delete(book.id); session = undefined; }
     if (!session) {
       const rpc = new Rpc();
       try {
         await rpc.initialize();
-        const params = { cwd: book.directory, approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: teachingRules, ...(process.env.CODEX_MODEL ? { model: process.env.CODEX_MODEL } : {}) };
+        const params = { cwd: book.directory, approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: teachingRules, ...(generation.model ? { model: generation.model } : {}) };
         const result = book.threadId ? await rpc.call('thread/resume', { ...params, threadId: book.threadId }) : await rpc.call('thread/start', params);
         session = { rpc, threadId: result.thread.id }; this.sessions.set(book.id, session); thread(session.threadId);
       } catch (e) { rpc.close(); throw e; }
@@ -98,8 +138,8 @@ export class CodexProvider implements Provider {
       };
       const timeout = setTimeout(() => { this.sessions.delete(book.id); rpc.close(); finish(new Error('Generation timed out after 5 minutes. Retry to continue.')); }, 300000);
       rpc.on('notification', onEvent); rpc.on('disconnected', onDisconnect); signal.addEventListener('abort', abort, { once: true });
-      rpc.call('turn/start', { threadId, input: [{ type: 'text', text: JSON.stringify(prompt), text_elements: [] }], outputSchema: jsonSchema }).then(res => { turnId = res.turn.id; if (signal.aborted) abort(); }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
+      rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: JSON.stringify(prompt), text_elements: [] }], outputSchema: jsonSchema }).then(res => { turnId = res.turn.id; if (signal.aborted) abort(); }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
     });
   }
-  close() { for (const s of this.sessions.values()) s.rpc.close(); this.sessions.clear(); }
+  close() { for (const s of this.sessions.values()) s.rpc.close(); this.sessions.clear(); for (const rpc of this.catalogProcesses) rpc.close(); this.catalogProcesses.clear(); this.catalogs.clear(); }
 }

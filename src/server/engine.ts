@@ -4,9 +4,10 @@ import { realpathSync, statSync } from 'node:fs';
 import type { Book, Job, Output, Ref, Route, Step } from '../shared/types';
 import { currentTree, nodeAt, resolveRef } from '../shared/types';
 import { Store } from './store';
+import { defaultGeneration, resolveGeneration, type GenerationSettings, type ModelCatalog } from '../shared/models';
 import { outputSchema } from './protocol';
 export interface GenerationContext { book: Book; job: Job; ids: string[]; parentId: string | null }
-export interface Provider { generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void): Promise<Output>; close?(): void }
+export interface Provider { listModels?(directory: string): Promise<ModelCatalog>; generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void): Promise<Output>; close?(): void }
 const id = () => randomUUID();
 const now = () => new Date().toISOString();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -20,8 +21,22 @@ export class Engine extends EventEmitter {
   addBook(name: string, directory: string) {
     const path = realpathSync(directory);
     if (!statSync(path).isDirectory()) throw new Error('Select a material directory');
-    const b: Book = { id: id(), name, directory: path, threadId: null, epoch: 0, activeTreeId: null, trees: {}, routes: {}, nodes: {}, questions: {}, jobs: {}, actions: {} };
+    const b: Book = { generation: defaultGeneration(), id: id(), name, directory: path, threadId: null, epoch: 0, activeTreeId: null, trees: {}, routes: {}, nodes: {}, questions: {}, jobs: {}, actions: {} };
     this.state.books[b.id] = b; this.save(); return b;
+  }
+  async models(bookId: string) {
+    const b = this.book(bookId);
+    if (!this.provider.listModels) throw new Error('Model selection is unavailable in demo mode.');
+    return this.provider.listModels(b.directory);
+  }
+  async configure(bookId: string, settings: GenerationSettings) {
+    const b = this.book(bookId), catalog = await this.models(bookId);
+    const resolved = resolveGeneration(catalog, settings);
+    const option = catalog.models.find(m => m.model === resolved.model);
+    if (settings.model !== null && !option) throw new Error('This model is not in the local Codex catalog. Reload the model list.');
+    if (settings.effort !== null && !option?.supportedReasoningEfforts.some(e => e.reasoningEffort === settings.effort)) throw new Error('The selected model does not support this reasoning effort.');
+    if (this.stopped) throw new Error('Application is stopping.');
+    b.generation = { ...settings }; this.save();
   }
   cancelBackground(b: Book, all = false) {
     for (const j of Object.values(b.jobs)) if ((all || j.kind === 'background') && ['running', 'queued'].includes(j.status)) {
@@ -126,6 +141,7 @@ export class Engine extends EventEmitter {
     const j = Object.values(b.jobs).filter(j => j.status === 'queued').sort((a, z) => Number(a.kind === 'background') - Number(z.kind === 'background'))[0];
     if (!j) return;
     const controller = new AbortController(); this.running.set(bookId, { controller, job: j });
+    j.generation = { ...b.generation };
     j.status = 'running'; j.progress = 'Preparing the next conceptual step…'; this.save();
     const route = b.routes[j.routeId];
     const ids = Array.from({ length: j.count }, () => id());

@@ -1,10 +1,11 @@
+import type { GenerationSettings } from './models';
 export type Ref = { routeId: string; index: number };
 export type Step = { id: string; routeId: string; index: number; title: string; content: string; parentId: string | null; version: number; supersededBy: string | null; completed: boolean; createdAt: string };
 export type Route = { id: string; treeId: string; questionId: string | null; nodeIds: string[]; finished: boolean; returnTo: Ref | null };
 export type Question = { id: string; nodeId: string; text: string; routeId: string; returnTo: Ref | null; wasCurrent: boolean; entered: boolean; resolved: boolean };
 export type Tree = { id: string; prompt: string; routeId: string; cursor: Ref | null; cursorEpoch: number; createdAt: string };
-export type Job = { id: string; epoch: number; routeId: string; start: number; count: number; kind: 'initial' | 'background' | 'question'; status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; progress?: string; createdAt: string };
-export type Book = { id: string; name: string; directory: string; threadId: string | null; epoch: number; activeTreeId: string | null; trees: Record<string, Tree>; routes: Record<string, Route>; nodes: Record<string, Step>; questions: Record<string, Question>; jobs: Record<string, Job>; actions: Record<string, boolean> };
+export type Job = { generation?: GenerationSettings; id: string; epoch: number; routeId: string; start: number; count: number; kind: 'initial' | 'background' | 'question'; status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; progress?: string; createdAt: string };
+export type Book = { generation: GenerationSettings; id: string; name: string; directory: string; threadId: string | null; epoch: number; activeTreeId: string | null; trees: Record<string, Tree>; routes: Record<string, Route>; nodes: Record<string, Step>; questions: Record<string, Question>; jobs: Record<string, Job>; actions: Record<string, boolean> };
 export type Workspace = { schemaVersion: 1; books: Record<string, Book> };
 export type Output = { jobId: string; routeId: string; steps: { id: string; title: string; content: string; parentId: string | null; nextId: string | null }[]; finished: boolean; continuation: Ref | null; revisions: { nodeId: string; expectedVersion: number; title: string; content: string; reason: string }[] };
 export function resolveRef(book: Book, ref: Ref | null, seen = new Set<string>()): Ref | null {

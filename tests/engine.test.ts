@@ -100,3 +100,9 @@ test('Continue before successor generation finishes retains a logical cursor and
 test('multiple questions queue FIFO and duplicate comments do not create extra branches',async()=>{
  const f=setup();try{await initial(f);const {e,b,p}=f,n=cursor(b),a=action();e.comment(b.id,n.id,'First',a);e.comment(b.id,n.id,'First',a);e.comment(b.id,n.id,'Second',action());assert.equal(Object.keys(b.questions).length,2);assert.equal(p.calls.length,2);await p.finish(1,true,1);assert.equal(p.calls[2].ctx.book.questions[p.calls[2].ctx.book.routes[p.calls[2].ctx.job.routeId].questionId!].text,'Second');await p.finish(2,true,1);}finally{f.cleanup();}
 });
+test('legacy workspace without model preferences restores graph and initializes defaults',async()=>{
+ const f=setup();await initial(f);const bookId=f.b.id,first=cursor(f.b).id;f.e.close();
+ delete (f.b as Partial<Book>).generation;f.store.save();f.store.close();
+ const restored=new Store(f.path);
+ try{assert.deepEqual(restored.state.books[bookId].generation,{model:null,effort:null});assert.equal(cursor(restored.state.books[bookId]).id,first);assert.equal(Object.keys(restored.state.books[bookId].nodes).length,2);}finally{restored.close();}
+});

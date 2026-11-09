@@ -38,6 +38,12 @@ app.post('/api/books', (req,res) => {
   if (dir === dataDir || dir.startsWith(dataDir+sep) || dataDir.startsWith(dir+sep)) throw new Error('Book materials and application data must be in separate directories');
   res.json(engine.addBook(input.name, dir));
 });
+app.get('/api/books/:bookId/models', async (req,res) => res.json(await engine.models(req.params.bookId)));
+app.post('/api/books/:bookId/generation', async (req,res) => {
+  const settings = z.object({ model: z.string().min(1).max(200).nullable(), effort: z.string().min(1).max(100).nullable() }).strict().parse(req.body);
+  await engine.configure(req.params.bookId, settings);
+  res.json(engine.book(req.params.bookId));
+});
 app.post('/api/books/:bookId/:operation', (req,res) => {
   const b = req.params.bookId;
   const body = req.body || {};

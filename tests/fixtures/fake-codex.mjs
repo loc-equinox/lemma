@@ -6,6 +6,12 @@ createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line),p=m.params;
  if(m.method==='initialize')return send({id:m.id,result:{userAgent:'test-protocol'}});
  if(m.method==='initialized')return;
+ if(m.method==='config/read')return send({id:m.id,result:{config:{model:'fixture-alpha',model_reasoning_effort:'high'}}});
+ if(m.method==='model/list'){
+  const model=p.cursor?'fixture-beta':'fixture-alpha';
+  const efforts=p.cursor?['medium']:['low','high'];
+  return send({id:m.id,result:{data:[{model,displayName:model,description:'Protocol test model',defaultReasoningEffort:efforts[0],supportedReasoningEfforts:efforts.map(reasoningEffort=>({reasoningEffort,description:reasoningEffort})),isDefault:!p.cursor}],nextCursor:p.cursor?null:'page-2'}});
+ }
  if(m.method==='thread/start'||m.method==='thread/resume'){
   if(p.cwd===undefined||p.sandbox!=='read-only'||p.approvalPolicy!=='never')return send({id:m.id,error:{message:'unsafe thread config'}});
   if(m.method==='thread/resume'&&p.threadId!==threadId)return send({id:m.id,error:{message:'unknown thread'}});
@@ -18,7 +24,7 @@ createInterface({input:process.stdin}).on('line',line=>{
   send({method:'item/agentMessage/delta',params:{threadId,turnId,delta:'working'}});
   timer=setTimeout(()=>{
    const ids=task.allocatedIds;
-   const output={jobId:task.jobId,routeId:task.routeId,finished:true,continuation:task.returnTo,revisions:[],steps:ids.map((id,i)=>({id,title:'Verified conceptual step',content:'$1/n \\to 0$.',parentId:i?ids[i-1]:task.firstParentId,nextId:ids[i+1]||null}))};
+   const output={jobId:task.jobId,routeId:task.routeId,finished:true,continuation:task.returnTo,revisions:[],steps:ids.map((id,i)=>({id,title:`Verified ${p.model}/${p.effort}`,content:'$1/n \\to 0$.',parentId:i?ids[i-1]:task.firstParentId,nextId:ids[i+1]||null}))};
    send({method:'item/completed',params:{threadId,turnId,item:{type:'agentMessage',id:'answer',text:JSON.stringify(output)}}});
    send({method:'turn/completed',params:{threadId,turn:{id:turnId,status:'completed'}}});
   },task.task.includes('slow')?1000:15);return;

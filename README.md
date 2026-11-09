@@ -34,6 +34,7 @@ The default development command uses Vite middleware and live reload. `npm start
 
 ## Reading
 
+- Use **Model** and **Reasoning** above the prompt to choose generation settings for the current book. Options come from the installed Codex model catalog, with only each model’s supported reasoning efforts offered. Choices persist across refresh/restart and Clear. They apply to the next generation; in-progress work and existing nodes keep their settings. **Codex default** restores the local configured model and effort without changing your global Codex configuration.
 - A prompt starts a new tree. Initial generation prepares two conceptual steps, unless the task only needs one.
 - Click any node to inspect it. Viewing does not move your formal reading position.
 - **Continue** completes the current step and advances the saved reading route. The next step is prepared in the background.
@@ -54,7 +55,7 @@ SQLite workspace state lives in `.data/workspace.sqlite` by default, outside mat
 | `PORT` | `4317` | Loopback HTTP port |
 | `DATA_DIR` | `.data` | Application database directory |
 | `CODEX_BIN` | `codex` | Codex executable path |
-| `CODEX_MODEL` | Installed Codex default | Optional explicit model override |
+| `CODEX_MODEL` | Installed Codex default | Default model when the book uses **Codex default** |
 | `AI_PROVIDER` | `codex` | Set `demo` for fixed sample content |
 | `CHROME_PATH` | Installed Chrome channel | Executable used by browser verification |
 | `TEST_URL` | `http://127.0.0.1:4317` | Browser test target |
@@ -79,7 +80,9 @@ npm run test:browser
 
 The browser test requires Google Chrome (or `CHROME_PATH`) and writes screenshots under `.data/screenshots`. It registers a verification book and clears that book’s map at the end; use the isolated test data directory. The live test creates a real persistent test Codex thread, checks material reading, background generation, a question return, Clear, restart and thread resumption. The interruption test resumes that isolated test workspace and confirms an actual interrupted turn after Clear. It uses ordinary model usage and keeps evidence under `.data/live-*`.
 
-The state/HTTP suite, full build, Chrome browser workflow, and real Codex generation/resumption/interruption have all passed. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the verification record and practical limits.
+Model-selection checks are available as `node --import tsx scripts/model-live-test.ts` (real model usage) and `node --import tsx scripts/model-browser-test.ts`. For the latter, start an isolated fixture server with `CODEX_BIN="$PWD/tests/fixtures/fake-codex.mjs" DATA_DIR=.data/model-browser PORT=4319 npm start`; it exercises model/effort switching without inference.
+
+The state/HTTP suite, full build, Chrome browser workflow, model switching, and real Codex generation/resumption/interruption have all passed. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the verification record and practical limits.
 
 ## Project structure
 
