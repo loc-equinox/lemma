@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReactFlow, Background, Controls, MiniMap, MarkerType, type Node, type Edge } from '@xyflow/react';
-import Markdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import remarkGfm from 'remark-gfm';
-import rehypeKatex from 'rehype-katex';
+import { StepContent } from './StepContent';
 import type { Book, Step, Workspace } from '../shared/types';
 import { currentTree, nodeAt, label, successor } from '../shared/types';
 import '@xyflow/react/dist/style.css';
@@ -110,7 +107,7 @@ function App() {
         {node&&<aside className="reader" aria-label="Step reader"><div className="reader-top"><span>{label(book,node)} <i> / {node.completed?'Completed':isCurrent?'Studying':'Preview'}</i></span><button aria-label="Close reader" onClick={()=>setSelected(null)}>×</button></div><article>
           {node.supersededBy&&<div className="revision-notice">This version has been superseded. <button onClick={()=>setSelected(node.supersededBy)}>Read the updated step →</button></div>}
           {node.version>1&&<details className="version-history"><summary>Revised · version {node.version}</summary>{Object.values(book.nodes).filter(n=>n.routeId===node.routeId&&n.index===node.index&&n.id!==node.id).map(n=><button key={n.id} onClick={()=>setSelected(n.id)}>View version {n.version}{n.supersededBy?' (superseded)':''}</button>)}</details>}
-          <h2>{node.title}</h2><div className="math-content"><Markdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[rehypeKatex]}>{node.content}</Markdown></div>
+          <h2>{node.title}</h2><StepContent content={node.content}/>
           {questions.map(q=><div className="question-card" key={q.id}><span className="eyebrow">YOUR QUESTION {q.resolved?'· RESOLVED':''}</span><p>{q.text}</p>{!q.entered ? <button disabled={busy} onClick={()=>run(async()=>{navigate(await act('enter',{questionId:q.id}));})}>Enter explanation →</button> : <button onClick={()=>{const first=book.routes[q.routeId].nodeIds[0];if(first)setSelected(first);}}>View explanation ↗</button>}</div>)}
           <form className="comment-form" onSubmit={e=>{e.preventDefault();run(async()=>{await act('comments',{nodeId:node.id,text:comment});setComment('');});}}><label htmlFor="comment">Something unclear?</label><textarea id="comment" placeholder="Ask about this step…" value={comment} onChange={e=>setComment(e.target.value)} maxLength={12000}/><button disabled={busy||!comment.trim()}>Comment <span>↗</span></button></form>
           </article><div className="reader-footer">{isCurrent&&!node.supersededBy ? <><small>{waitingQuestion?'Your question has an explanation to enter.':nextNode?`${returnStep?'Return to':'Up next'} ${label(book,nextNode)} · ${nextNode.title}`:next?'The next step will be prepared for you.':'You have reached the end of this learning task.'}</small><button className="primary" disabled={busy||waitingQuestion} onClick={()=>run(async()=>{navigate(await act('continue',{nodeId:node.id,epoch:tree!.cursorEpoch}));})}>{nextNode?`${returnStep?'Return to':'Continue to'} ${label(book,nextNode)}`:next?'Continue':'Complete this task'} <span>→</span></button></> : <><small>Viewing a step leaves your reading position unchanged.</small><button className="primary" onClick={openCurrent}>{current?'Back to current step':'Back to learning route'} <span>↗</span></button></>}</div></aside>}

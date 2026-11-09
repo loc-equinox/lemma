@@ -25,6 +25,25 @@ try {
  await page.getByRole('button',{name:'Reading S1'}).click();
  await page.locator('.reader .katex').first().waitFor();
  let b=(await state()).books[bookId];const first=b.routes[Object.values<any>(b.trees)[0].routeId].nodeIds[0];
+ const initialCursor=JSON.stringify(Object.values<any>(b.trees)[0].cursor);
+ const draft='Why is $\\varepsilon>0$ required?';
+ await page.getByLabel('Something unclear?').fill(draft);
+ await page.getByRole('button',{name:'Markdown source',exact:true}).click();
+ const source=page.getByRole('textbox',{name:'Markdown source',exact:true});
+ assert.equal(await source.inputValue(),b.nodes[first].content);
+ assert.equal(await source.getAttribute('readonly'),'');
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base});
+ await page.getByRole('button',{name:'Copy source',exact:true}).click();
+ await page.getByText('Copied',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),b.nodes[first].content);
+ mkdirSync('.data/screenshots',{recursive:true});
+ await page.screenshot({path:'.data/screenshots/markdown-source.png',fullPage:true});
+ await page.getByRole('button',{name:'Rendered',exact:true}).click();
+ await page.locator('.reader .katex').first().waitFor();
+ assert.equal(await page.getByLabel('Something unclear?').inputValue(),draft);
+ assert.equal(JSON.stringify(Object.values<any>((await state()).books[bookId].trees)[0].cursor),initialCursor);
+ assert.equal(Object.keys((await state()).books[bookId].nodes).length,2);
+
  await page.getByRole('button',{name:'Continue to S2'}).click();
  await waitFor(s=>Object.keys(s.books[bookId].nodes).length===3);
  b=(await state()).books[bookId];const cursorBefore=JSON.stringify(Object.values<any>(b.trees)[0].cursor);

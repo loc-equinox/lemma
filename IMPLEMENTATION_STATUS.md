@@ -7,7 +7,7 @@ The first usable version is implemented and verified. The earlier execution-sand
 ## Implemented behavior
 
 - Multiple local books, one persistent Codex conversation per book, and multiple learning trees per map.
-- Interactive graph, explicit tree resume, node reading, Markdown/LaTeX, question branches, generation feedback, retry, and Clear.
+- Interactive graph, explicit tree resume, node reading, Markdown/LaTeX, question branches, generation feedback, retry, and Clear. The reading pane switches between rendered content and read-only Markdown source, with exact source copying for LaTeX questions.
 - Formal reading positions separate from displayed nodes; one successor buffered on the active route; explicit completion and duplicate-action protection.
 - Single/multiple/nested explanations and return targets captured when the question is submitted, including targets not yet generated.
 - Question priority, serialized per-book jobs, interruption, canvas epochs, stale-result rejection, and preservation of completed results.
@@ -19,7 +19,7 @@ The first usable version is implemented and verified. The earlier execution-sand
 
 - **16 automated tests passed** (`npm test`). These cover the graph state machine, subprocess JSON-RPC transport, and real HTTP requests. HTTP testing launches, stops, and restarts the application and checks persisted reading state, book isolation, SSE, input/origin validation, and Clear during generation.
 - **Full TypeScript check and production build passed** (`npm run build`).
-- **Chrome browser verification passed** against the running application: book registration/switching, prompt generation, reading, Continue/prefetch, browsing without cursor movement, old-node questions, nested explanation returns, LaTeX rendering, refresh recovery, desktop/narrow layouts, and Clear. No browser page exceptions were observed. Desktop and narrow screenshots were visually inspected.
+- **Chrome browser verification passed** against the running application: book registration/switching, prompt generation, reading, Continue/prefetch, browsing without cursor movement, old-node questions, nested explanation returns, LaTeX rendering, refresh recovery, desktop/narrow layouts, and Clear. Source-view verification additionally checks exact Markdown/LaTeX preservation, clipboard copying, and unchanged reading position and question draft when toggling formats. No browser page exceptions were observed. Desktop and narrow screenshots were visually inspected.
 - **Real Codex integration passed** using installed CLI 0.167.0 and the user's configured model: local material reading, structured S1/S2 generation, background S3, an old-node explanation returning to the active reading position, Clear preserving the thread, and application/provider restart followed by `thread/resume` using the same thread ID.
 - **Actual `turn/interrupt` passed**: the App Server confirmed `interrupted`; Clear kept the conversation and the map remained empty.
 - Generated proof steps from the original convergence fixture were reviewed for conceptual boundaries, notation and valid epsilon–N reasoning; Markdown/LaTeX strings were checked for proper encoding.

@@ -37,6 +37,7 @@ The default development command uses Vite middleware and live reload. `npm start
 - A prompt starts a new tree. Initial generation prepares two conceptual steps, unless the task only needs one.
 - Click any node to inspect it. Viewing does not move your formal reading position.
 - **Continue** completes the current step and advances the saved reading route. The next step is prepared in the background.
+- In the reading pane, switch between **Rendered** and **Markdown source**. Select a formula in the read-only source to copy its LaTeX, or use **Copy source** for the complete step. Switching views preserves your reading position and question draft.
 - **Comment** saves a question and creates an explanation route. **Enter explanation** explicitly starts reading it; arriving results never replace the page you are viewing.
 - Questions on old nodes return to the position saved when you asked. Nested questions return through the outer explanation.
 - Use the tree buttons to explicitly resume a suspended tree, or the **Reading S…** button to return to the active step.
