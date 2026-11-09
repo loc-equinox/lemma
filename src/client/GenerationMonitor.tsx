@@ -36,7 +36,8 @@ function Terminal({ bookId, demo, onClose }: { bookId: string; demo: boolean; on
       <button onClick={() => setFollowing(!following)} aria-pressed={following}>{following ? 'Following output' : 'Follow output'}</button>
       <button aria-label="Close terminal" onClick={onClose}>×</button>
     </header>
-    <div ref={viewport} className="terminal-output" role="log" aria-label="Codex terminal output" aria-live="off" tabIndex={0}
+    {/* Keep viewport styling separate from terminal-output tool entries, which must not capture scrolling. */}
+    <div ref={viewport} className="terminal-viewport" role="log" aria-label="Codex terminal output" aria-live="off" tabIndex={0}
       onScroll={event => { const el = event.currentTarget; setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < 24); }}>
       <p className="terminal-note">{truncated ? 'Older output was trimmed. ' : ''}Recent output from this server session. {demo ? 'Demo mode does not send prompts to Codex.' : ''}</p>
       {!blocks.length && <p className="terminal-empty">Output will appear when the next generation starts.</p>}
