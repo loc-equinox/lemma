@@ -19,7 +19,7 @@ export class Store {
       book.references ??= {};
       book.generation ??= defaultGeneration();
       for (const job of Object.values(book.jobs)) {
-        if (job.status === 'running' || job.status === 'queued') { job.status = 'failed'; job.error = 'Application stopped during generation. Retry to continue.'; }
+        if (job.status === 'running' || job.status === 'queued') { job.endedAt ??= new Date().toISOString(); job.status = 'failed'; job.error = 'Application stopped during generation. Retry to continue.'; }
       }
     }
     recoverDocumentWrites(this.db,this.state);

@@ -1,5 +1,11 @@
 # Implementation status
 
+## Read-only terminal and timing
+
+Added a toggleable terminal with exact sent prompts, expandable session instructions, streamed Codex messages, public progress summaries, command/tool output and errors. It replays recent output when reopened or refreshed, pauses follow mode when scrolling upward, isolates books, and resets on Clear. Logs are bounded and session-only; job start/end times persist. Working duration updates locally once per second. The separate SSE stream batches output without workspace fetches, database writes or generation control actions.
+
+Verification: 35 automated tests passed, including exact wire-prompt comparison, output before completion, rejection of foreign/stale turn events, bounded replay, final-message reconciliation, SSE isolation, cancellation/Clear, timestamp persistence and unchanged workspace notification counts. Chrome verified live output, timer, toggle/replay, scroll pause, refresh, unchanged reading position/question drafts, book switching and narrow layout. Real Codex `gpt-6.1-sol` at low effort completed a one-step task with 261 message events plus command/output and automatic-retry errors visible during generation. Evidence: `.data/terminal-live-Ca9dJn/result.json`; screenshots: `.data/screenshots/codex-terminal*.png`.
+
 ## Delivery
 
 The first usable version is implemented and verified. The earlier execution-sandbox blockers were removed when full access was enabled. Dependencies are installed, the lockfile is committed, the production frontend builds, and real Codex session creation, generation, interruption and resumption have passed.

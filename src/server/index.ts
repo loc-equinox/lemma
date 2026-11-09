@@ -23,6 +23,24 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '128kb' }));
 app.get('/api/state', (_req,res) => res.json({ ...engine.state, provider: demo ? 'demo' : 'codex' }));
+app.get('/api/books/:bookId/terminal', (req, res) => {
+  const bookId = engine.book(req.params.bookId).id;
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  let last = 0, version = -1;
+  const send = () => {
+    // A slow or closed observer must never block generation or grow a socket queue indefinitely.
+    if (res.destroyed) return;
+    if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
+    const log = engine.terminal.read(bookId), reset = version !== log.version;
+    const events = reset ? log.events : log.events.filter(event => event.seq > last);
+    if (!reset && !events.length) return;
+    res.write(`event: terminal\ndata: ${JSON.stringify({ reset, events, truncated: log.truncated })}\n\n`);
+    last = events.at(-1)?.seq ?? last; version = log.version;
+  };
+  send();
+  const flush = setInterval(send, 200), ping = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  res.on('close', () => { clearInterval(flush); clearInterval(ping); });
+});
 app.get('/api/events', (req,res) => {
   res.writeHead(200, { 'Content-Type':'text/event-stream', 'Cache-Control':'no-cache', Connection:'keep-alive' });
   const update = () => res.write('data: changed\n\n');

@@ -7,6 +7,8 @@ import type { GenerationContext, Provider } from './engine';
 import { resolveGeneration, type ModelCatalog, type ModelOption } from '../shared/models';
 import type { Output, GenerationMetrics } from '../shared/types';
 import { prepareContext } from './context';
+import { observeCodex } from './codex-terminal';
+import type { TerminalChunk } from '../shared/terminal';
 export class Rpc extends EventEmitter {
   child: ChildProcessWithoutNullStreams;
   pending = new Map<number, { resolve: (x: any) => void; reject: (x: Error) => void; timer: NodeJS.Timeout }>();
@@ -99,7 +101,8 @@ export class CodexProvider implements Provider {
       return { models, defaultModel, defaultEffort };
     } finally { if (!existing) { rpc.close(); this.catalogProcesses.delete(rpc); } }
   }
-  async generate(ctx: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void, report?: (metrics: GenerationMetrics) => void): Promise<Output | DocumentOutput> {
+  async generate(ctx: GenerationContext, signal: AbortSignal, progress: (s: string) => void, thread: (id: string) => void, report?: (metrics: GenerationMetrics) => void, observe?: (chunk: TerminalChunk) => void): Promise<Output | DocumentOutput> {
+    const log = (chunk: TerminalChunk) => { try { observe?.(chunk); } catch { /* Observers cannot fail generation. */ } };
     const started = performance.now();
     const { book, job } = ctx;
     if (signal.aborted) throw new Error('Generation interrupted');
@@ -109,10 +112,12 @@ export class CodexProvider implements Provider {
     if (!session) {
       const rpc = new Rpc();
       try {
+        log({ kind: 'status', text: 'Connecting to local Codex…' });
         await rpc.initialize();
         generation = resolveGeneration(await this.generationCatalog(book.directory,rpc),book.generation);
         if (signal.aborted) throw new Error('Generation interrupted');
         const params = { cwd: book.directory, approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: teachingRules, ...(generation.model ? { model: generation.model } : {}) };
+        log({ kind: 'status', text: book.threadId ? `Resuming thread ${book.threadId}` : 'Starting a Codex thread…' });
         const result = book.threadId ? await rpc.call('thread/resume', { ...params, threadId: book.threadId, excludeTurns:true }) : await rpc.call('thread/start', params);
         session = { rpc, threadId: result.thread.id, directory:book.directory }; this.sessions.set(book.id, session); thread(session.threadId);
       } catch (e) { rpc.close(); throw e; }
@@ -128,6 +133,7 @@ export class CodexProvider implements Provider {
     try {
       return await new Promise<Output | DocumentOutput>((resolve, reject) => {
         let turnId: string | undefined, finalText = '', settled = false, abortTimer: NodeJS.Timeout | undefined;
+        const earlyEvents: any[] = [];
         const finish = (error?: Error, output?: Output | DocumentOutput) => {
           if (settled) return; settled = true; clearTimeout(timeout); clearTimeout(abortTimer);
           rpc.off('notification', onEvent); rpc.off('disconnected', onDisconnect); signal.removeEventListener('abort', abort);
@@ -142,7 +148,11 @@ export class CodexProvider implements Provider {
         const onDisconnect = (e: Error) => finish(e);
         const onEvent = (m: any) => {
           const p = m.params;
-          if (p?.threadId !== threadId || (turnId && p.turnId && p.turnId !== turnId)) return;
+          if (settled || p?.threadId !== threadId) return;
+          // Notifications may precede the RPC acknowledgement. Bind them to its exact turn.
+          if (!turnId) { earlyEvents.push(m); return; }
+          if ((p.turnId || p.turn?.id) && (p.turnId || p.turn?.id) !== turnId) return;
+          try { observeCodex(m.method, p, log); } catch { /* Diagnostic parsing is best effort. */ }
           if (m.method === 'item/started' || m.method === 'item/agentMessage/delta') metrics.firstEventMs ??= Math.round(performance.now()-submitted);
           if (m.method === 'item/agentMessage/delta') progress('Writing your explanation…');
           if (m.method === 'item/started' && p.item.type === 'commandExecution') { metrics.commands++; progress('Running a local command…'); }
@@ -155,7 +165,14 @@ export class CodexProvider implements Provider {
         };
         const timeout = setTimeout(() => { this.sessions.delete(book.id); rpc.close(); finish(new Error('Generation timed out after 5 minutes. Retry to continue.')); }, 300000);
         rpc.on('notification', onEvent); rpc.on('disconnected', onDisconnect); signal.addEventListener('abort', abort, { once: true });
-        rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: input, text_elements: [] }], outputSchema: documentTask ? documentJsonSchema : jsonSchema }).then(res => { turnId = res.turn.id; metrics.submitMs=Math.round(performance.now()-submitted); if (signal.aborted) abort(); }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
+        log({ kind: 'status', text: `Model ${generation.model || 'default'} · reasoning ${generation.effort || 'default'} · thread ${threadId}` });
+        log({ kind: 'instructions', text: teachingRules });
+        log({ kind: 'prompt', text: input });
+        rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: input, text_elements: [] }], outputSchema: documentTask ? documentJsonSchema : jsonSchema }).then(res => {
+          turnId = res.turn.id; metrics.submitMs=Math.round(performance.now()-submitted);
+          for (const event of earlyEvents.splice(0)) onEvent(event);
+          if (signal.aborted && !settled) abort();
+        }).catch(e => { this.sessions.delete(book.id); rpc.close(); finish(e); });
       });
     } finally { context.dispose(); this.contexts.delete(context.dispose); }
   }

@@ -6,16 +6,23 @@ import { realpathSync, statSync } from 'node:fs';
 import type { Book, Job, Output, Ref, Route, Step, GenerationMetrics } from '../shared/types';
 import { currentTree, nodeAt, resolveRef } from '../shared/types';
 import { Store } from './store';
+import { TerminalLog } from './terminal';
+import type { TerminalChunk } from '../shared/terminal';
 import { defaultGeneration, resolveGeneration, type GenerationSettings, type ModelCatalog } from '../shared/models';
 import { outputSchema, documentOutputSchema } from './protocol';
 export interface GenerationContext { documents?: DocumentSnapshot[]; book: Book; job: Job; ids: string[]; parentId: string | null }
-export interface Provider { listModels?(directory: string): Promise<ModelCatalog>; generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void, report?: (metrics: GenerationMetrics) => void): Promise<Output | DocumentOutput>; close?(): void }
+export interface Provider { listModels?(directory: string): Promise<ModelCatalog>; generate(ctx: GenerationContext, signal: AbortSignal, progress: (message: string) => void, thread: (id: string) => void, report?: (metrics: GenerationMetrics) => void, observe?: (chunk: TerminalChunk) => void): Promise<Output | DocumentOutput>; close?(): void }
 const id = () => randomUUID();
 const now = () => new Date().toISOString();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 export class Engine extends EventEmitter {
   running = new Map<string, { controller: AbortController; job: Job }>();
   stopped = false;
+  terminal = new TerminalLog();
+  finishJob(b: Book, j: Job) {
+    j.endedAt ??= now();
+    this.terminal.write(b.id, j.id, { kind: j.status === 'failed' ? 'error' : 'status', text: `${j.status}${j.error ? ': ' + j.error : ''}` });
+  }
   constructor(public store: Store, public provider: Provider) { super(); }
   get state() { return this.store.state; }
   save() { this.store.save(); this.emit('change'); }
@@ -43,6 +50,7 @@ export class Engine extends EventEmitter {
   cancelBackground(b: Book, all = false) {
     for (const j of Object.values(b.jobs)) if ((all || j.kind === 'background') && ['running', 'queued'].includes(j.status)) {
       j.status = 'cancelled'; j.error = all ? 'Map or active task changed.' : 'Paused for your question.';
+      this.finishJob(b, j);
       if (this.running.get(b.id)?.job.id === j.id) this.running.get(b.id)!.controller.abort();
     }
   }
@@ -134,7 +142,7 @@ export class Engine extends EventEmitter {
     this.ensureAhead(b); this.save(); this.pump(b.id);
   }
   clear(bookId: string) {
-    const b = this.book(bookId); this.cancelBackground(b, true); b.epoch++;
+    const b = this.book(bookId); this.cancelBackground(b, true); b.epoch++; this.terminal.clear(bookId);
     b.references = {}; b.trees = {}; b.routes = {}; b.nodes = {}; b.questions = {}; b.jobs = {}; b.actions = {}; b.activeTreeId = null;
     this.save();
   }
@@ -163,6 +171,8 @@ export class Engine extends EventEmitter {
     if (!j) return;
     const controller = new AbortController(); this.running.set(bookId, { controller, job: j });
     j.generation = { ...b.generation };
+    j.startedAt = now();
+    this.terminal.write(b.id, j.id, { kind: 'status', text: `Starting ${j.kind} generation` });
     j.status = 'running'; j.progress = isDocumentJob(j) ? `Preparing ${documentFile(j.kind)}…` : 'Preparing the next conceptual step…'; this.save();
     const route = b.routes[j.routeId];
     const ids = Array.from({ length: j.count }, () => id());
@@ -170,21 +180,22 @@ export class Engine extends EventEmitter {
     try {
       const documents = readDocuments(b.directory);
       const output = await this.provider.generate({ book: structuredClone(b), job: structuredClone(j), ids, parentId, documents }, controller.signal,
-        message => { if (j.status === 'running' && b.epoch === j.epoch && j.progress !== message) { j.progress = message; this.emit('change'); } },
+        message => { if (j.status === 'running' && b.epoch === j.epoch && j.progress !== message) { j.progress = message; this.terminal.write(b.id, j.id, { kind: 'status', text: message }); this.emit('change'); } },
         threadId => { if (!this.stopped) { b.threadId = threadId; this.save(); } },
-        metrics => { if (b.epoch === j.epoch) j.metrics = metrics; });
+        metrics => { if (b.epoch === j.epoch) j.metrics = metrics; },
+        chunk => { if (!this.stopped && j.status === 'running' && b.epoch === j.epoch) this.terminal.write(b.id, j.id, chunk); });
       if (controller.signal.aborted || j.status !== 'running' || b.epoch !== j.epoch) return;
       if (isDocumentJob(j)) {
         const result = documentOutputSchema.parse(output);
         const reference = saveDocument(this.store.db,b,j,result,documents.find(d=>d.file===documentFile(j.kind))!);
         installReference(b,reference);
       } else this.commit(b, j, outputSchema.parse(output), ids, parentId);
-      j.status = 'completed'; j.progress = undefined;
+      j.status = 'completed'; j.progress = undefined; this.finishJob(b, j);
       const t = currentTree(b); if (t) t.cursor = resolveRef(b, t.cursor);
       this.ensureAhead(b); this.save();
       if (isDocumentJob(j)) this.store.db.prepare("UPDATE document_writes SET status='saved' WHERE id=?").run(j.id);
     } catch (error) {
-      if (!this.stopped && j.status === 'running' && b.epoch === j.epoch) { j.status = controller.signal.aborted ? 'cancelled' : 'failed'; j.error = error instanceof Error ? error.message : String(error); this.save(); }
+      if (!this.stopped && j.status === 'running' && b.epoch === j.epoch) { j.status = controller.signal.aborted ? 'cancelled' : 'failed'; j.error = error instanceof Error ? error.message : String(error); this.finishJob(b, j); this.save(); }
     } finally { this.running.delete(bookId); if (!this.stopped) this.pump(bookId); }
   }
   commit(b: Book, j: Job, out: Output, ids: string[], parentId: string | null) {
@@ -216,7 +227,7 @@ export class Engine extends EventEmitter {
     if (this.stopped) return;
     this.stopped = true;
     for (const b of Object.values(this.state.books)) for (const j of Object.values(b.jobs)) {
-      if (j.status === 'running' || j.status === 'queued') { j.status = 'failed'; j.error = 'Application stopped during generation. Retry to continue.'; }
+      if (j.status === 'running' || j.status === 'queued') { j.status = 'failed'; j.error = 'Application stopped during generation. Retry to continue.'; this.finishJob(b, j); }
     }
     this.save();
     for (const { controller } of this.running.values()) controller.abort();

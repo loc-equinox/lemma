@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { readFileSync, appendFileSync } from 'node:fs';
 const log=value=>{if(process.env.FAKE_CODEX_LOG)appendFileSync(process.env.FAKE_CODEX_LOG,JSON.stringify({pid:process.pid,...value})+'\n');};
 log({event:'spawn'});
-let threadId='fixture-thread',turnId='',timer;
+let threadId='fixture-thread',turnId='',timer,streamTimer;
 const send=m=>process.stdout.write(JSON.stringify(m)+'\n');
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line),p=m.params;
@@ -27,17 +27,25 @@ createInterface({input:process.stdin}).on('line',line=>{
   if(task.nodes||task.routes||task.studyDocuments.some(d=>'content' in d))return send({id:m.id,error:{message:'Unexpected full context replay'}});
   const snapshot=JSON.parse(readFileSync(task.lookup.file,'utf8'));
   if(snapshot.jobId!==task.jobId||snapshot.canvasEpoch!==task.canvasEpoch)return send({id:m.id,error:{message:'Wrong lookup snapshot'}});
+  send({method:'item/agentMessage/delta',params:{threadId,turnId:'stale-turn',itemId:'stray',delta:'WRONG TURN'}});
+  send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'commentary',delta:'Checking the definition. '}});
   send({id:m.id,result:{turn:{id:turnId,status:'inProgress'}}});
-  for(let i=0;i<100;i++)send({method:'item/agentMessage/delta',params:{threadId,turnId,delta:'working'}});
+  send({method:'item/agentMessage/delta',params:{threadId:'other-thread',turnId,itemId:'stray',delta:'WRONG BOOK'}});
+  send({method:'item/started',params:{threadId,turnId,item:{type:'commandExecution',id:'read',cwd:p.cwd||'/fixture',command:'cat convergence.md'}}});
+  send({method:'item/commandExecution/outputDelta',params:{threadId,turnId,itemId:'read',delta:'Definition of convergence'}});
+  send({method:'item/completed',params:{threadId,turnId,item:{type:'commandExecution',id:'read',status:'completed',exitCode:0,aggregatedOutput:'Definition of convergence'}}});
+  for(let i=0;i<100;i++)send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'commentary',delta:'working '}});
+  const delay=Number(process.env.FAKE_CODEX_DELAY_MS)||(task.task.includes('slow')?1000:15);
+  streamTimer=setTimeout(()=>send({method:'item/agentMessage/delta',params:{threadId,turnId,itemId:'commentary',delta:'Ready to write the result.'}}),delay/2);
   timer=setTimeout(()=>{
    const ids=task.allocatedIds;
    const output={jobId:task.jobId,routeId:task.routeId,finished:true,continuation:task.returnTo,revisions:[],steps:ids.map((id,i)=>({id,title:`Verified ${p.model}/${p.effort}`,content:'$1/n \\to 0$.',parentId:i?ids[i-1]:task.firstParentId,nextId:ids[i+1]||null}))};
    send({method:'item/completed',params:{threadId,turnId,item:{type:'agentMessage',id:'answer',text:JSON.stringify(output)}}});
    send({method:'turn/completed',params:{threadId,turn:{id:turnId,status:'completed'}}});
-  },task.task.includes('slow')?1000:15);return;
+  },delay);return;
  }
  if(m.method==='turn/interrupt'){
-  clearTimeout(timer);send({id:m.id,result:{}});send({method:'turn/completed',params:{threadId,turn:{id:turnId,status:'interrupted'}}});return;
+  clearTimeout(timer);clearTimeout(streamTimer);send({id:m.id,result:{}});send({method:'turn/completed',params:{threadId,turn:{id:turnId,status:'interrupted'}}});return;
  }
  send({id:m.id,error:{message:'Unexpected method '+m.method}});
 });

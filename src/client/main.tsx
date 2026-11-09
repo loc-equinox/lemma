@@ -1,5 +1,6 @@
 import { ReferenceReader } from './ReferenceReader';
 import { ReadingWorkspace } from './ReadingWorkspace';
+import { GenerationMonitor } from './GenerationMonitor';
 import { instructionKind, isDocumentJob } from '../shared/documents';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -145,7 +146,7 @@ function App() {
             setState(previous=>previous?{...previous,books:{...previous.books,[updated.id]:updated}}:previous);
           } finally { setBusy(false); }
         }}/>}
-        <div role="status" className="generation-status">{activeJobs.length?<><span className="spinner"/>{activeJobs.find(j=>j.status==='running')?.progress || 'Your request is queued…'}</>:tree&&!tree.cursor?<><span className="connection-dot"/>Learning task complete. Start another idea whenever you’re ready.</>:<><span className="connection-dot"/>All changes saved. Your next question is welcome.</>}</div>
+        <GenerationMonitor bookId={book.id} jobs={Object.values(book.jobs)} complete={!!tree && !tree.cursor} demo={state?.provider==='demo'}/>
         {failedJobs.map(j=><div className="job-error" key={j.id}><span>Generation paused: {j.error}</span><button disabled={busy} onClick={()=>run(()=>act('retry',{jobId:j.id}))}>Retry</button></div>)}
         <form className="prompt-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(requestKind==='learn'){await act('trees',{prompt});setSelected(null);}else{await act('documents',{kind:requestKind,request:prompt,sectionTitle});}setPrompt('');});}}><span className="prompt-symbol">＋</span><textarea aria-label="New learning prompt" placeholder={requestKind==='learn'?"What would you like to understand? Start a new learning tree…":requestKind==='progress'?"Describe what to record in STUDY_PROGRESS.md…":"Describe the chapter conclusions to save in STUDY_NOTES.md…"} value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={12000} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}/><button className="primary" disabled={busy||!prompt.trim()}>{requestKind==='learn'?'Start learning':requestKind==='notes'?'Save chapter notes':'Update progress'} <span>↑</span></button></form><div className="prompt-hint">{requestKind==='learn'?'One idea at a time. Use /notes or /progress to save study context.':`Saves ${requestKind==='notes'?'STUDY_NOTES.md':'STUDY_PROGRESS.md'} in your book folder and adds a read-only reference. Your reading position stays unchanged.`}</div>
       </div></>}
