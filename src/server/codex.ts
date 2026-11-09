@@ -118,6 +118,7 @@ export class CodexProvider implements Provider {
         if (signal.aborted) throw new Error('Generation interrupted');
         const params = { cwd: book.directory, approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: teachingRules, ...(generation.model ? { model: generation.model } : {}) };
         log({ kind: 'status', text: book.threadId ? `Resuming thread ${book.threadId}` : 'Starting a Codex thread…' });
+        log({ kind: 'instructions', text: params.developerInstructions });
         const result = book.threadId ? await rpc.call('thread/resume', { ...params, threadId: book.threadId, excludeTurns:true }) : await rpc.call('thread/start', params);
         session = { rpc, threadId: result.thread.id, directory:book.directory }; this.sessions.set(book.id, session); thread(session.threadId);
       } catch (e) { rpc.close(); throw e; }
@@ -166,7 +167,6 @@ export class CodexProvider implements Provider {
         const timeout = setTimeout(() => { this.sessions.delete(book.id); rpc.close(); finish(new Error('Generation timed out after 5 minutes. Retry to continue.')); }, 300000);
         rpc.on('notification', onEvent); rpc.on('disconnected', onDisconnect); signal.addEventListener('abort', abort, { once: true });
         log({ kind: 'status', text: `Model ${generation.model || 'default'} · reasoning ${generation.effort || 'default'} · thread ${threadId}` });
-        log({ kind: 'instructions', text: teachingRules });
         log({ kind: 'prompt', text: input });
         rpc.call('turn/start', { threadId, ...generation, input: [{ type: 'text', text: input, text_elements: [] }], outputSchema: documentTask ? documentJsonSchema : jsonSchema }).then(res => {
           turnId = res.turn.id; metrics.submitMs=Math.round(performance.now()-submitted);

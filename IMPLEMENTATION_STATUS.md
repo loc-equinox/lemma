@@ -1,5 +1,11 @@
 # Implementation status
 
+## Map focus and accurate instruction logging
+
+Opening a node in side-by-side mode, or entering that mode with a node open, smoothly centers it in the visible map. This covers steps, references and navigation back to the current step. Focus waits for the target's measured dimensions and the split layout; later state refreshes leave manual pan/zoom alone. Chrome verified far-away nodes, changing selection, close/reopen, references, saved split preference and narrow/desktop transitions without reading-state mutations.
+
+Terminal session instructions are now logged beside the actual thread/start or thread/resume RPC. Previously the terminal redundantly displayed them on each turn even though they were not sent in those turn requests. Transport tests verify one instructions entry across consecutive turns on the same connection, a new entry on thread resumption, and no developerInstructions field in turn/start. All 35 automated tests and the production build pass.
+
 ## Read-only terminal and timing
 
 Fixed a scrolling trap caused by the viewport and tool-output entries sharing the same CSS class: tool output incorrectly became an inner scroll container with overscroll containment. Native-wheel browser regression now traverses long tool output in both directions, reverses direction, closes/reopens the panel and checks narrow layouts. The reported behavior was reproduced on the current log replay before the fix; the same gestures and streaming-follow checks pass after separating viewport styles.

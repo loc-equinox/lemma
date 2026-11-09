@@ -60,6 +60,15 @@ test('real transport logs exact sent prompt and live output before completion wi
     assert.equal(job.status,'completed');assert.ok(job.endedAt);assert.ok(changes<10,`${changes} workspace notifications`);
     assert.equal(Object.keys(book.nodes).length,2);
     assert.ok(entries().some(e=>e.kind==='status'&&e.text==='completed'));
+    engine.newTree(book.id,'Warm connection',randomUUID());await until(()=>!engine.running.has(book.id));
+    assert.equal(entries().filter(e=>e.kind==='instructions').length,1,'Warm turns must not log instructions as if they were sent again');
+    engine.provider.close?.();
+    engine.newTree(book.id,'Resumed connection',randomUUID());await until(()=>!engine.running.has(book.id));
+    const requests=readFileSync(process.env.FAKE_CODEX_LOG!,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+    const connections=requests.filter(e=>['thread/start','thread/resume'].includes(e.method));
+    assert.deepEqual(connections.map(e=>e.method),['thread/start','thread/resume']);
+    assert.equal(entries().filter(e=>e.kind==='instructions').length,connections.length);
+    assert.ok(requests.filter(e=>e.method==='turn/start').every(e=>!('developerInstructions' in e.params)));
     engine.close();store.close();
     const recovered=new Store(path);assert.equal(recovered.state.books[book.id].jobs[job.id].endedAt,job.endedAt);recovered.close();
   } finally {
