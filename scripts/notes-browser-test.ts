@@ -16,7 +16,7 @@ try{
  await page.getByLabel('Task type').selectOption('notes');await page.getByLabel('Chapter or topic').fill('Chapter 1 — Limits');await page.getByLabel('New learning prompt').fill('Summarize the important conclusions of this chapter.');await page.getByRole('button',{name:'Save chapter notes'}).click();
  await waitFor(s=>Object.values<any>(s.books[bookId].jobs).some(j=>j.kind==='notes'&&j.status==='completed'));
  let b=(await state()).books[bookId];assert.equal(Object.keys(b.trees).length,0);assert.equal(b.activeTreeId,null);assert.match(readFileSync(join(material,'STUDY_NOTES.md'),'utf8'),/Preserve my earlier CLI notes/);
- const ref:any=Object.values(b.references)[0];await page.getByRole('navigation',{name:'Saved references'}).getByRole('button',{name:/Chapter 1/}).click();
+ const ref:any=Object.values(b.references)[0];await page.locator(`.reference-node[data-id="${ref.id}"]`).click();
  const reader=page.getByRole('complementary',{name:'Reference reader'});await reader.getByRole('heading',{name:'Chapter 1 — Limits'}).waitFor();assert.equal(await reader.getByRole('button',{name:/Continue|Complete this task/}).count(),0);
  await reader.getByRole('button',{name:'Markdown source'}).click();assert.equal(await reader.getByRole('textbox',{name:'Markdown source'}).inputValue(),ref.content);await reader.getByRole('button',{name:'Rendered',exact:true}).click();
  await reader.getByLabel('Ask about this reference').fill('Explain the quantifiers.');await reader.getByRole('button',{name:'Comment'}).click();await reader.getByRole('button',{name:'Enter explanation'}).click();
@@ -26,10 +26,10 @@ try{
  b=(await state()).books[bookId];const cursor=JSON.stringify(b.trees[b.activeTreeId].cursor);
  await page.getByLabel('New learning prompt').fill('请更新学习进度');await page.getByRole('button',{name:/^Update progress/}).click();await waitFor(s=>Object.values<any>(s.books[bookId].jobs).some(j=>j.kind==='progress'&&j.status==='completed'));
  assert.match(readFileSync(join(material,'STUDY_PROGRESS.md'),'utf8'),/Study progress/);b=(await state()).books[bookId];assert.equal(JSON.stringify(b.trees[b.activeTreeId].cursor),cursor);
- await page.getByRole('navigation',{name:'Saved references'}).getByRole('button',{name:/Chapter 1/}).click();mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/chapter-reference.png'});
+ await page.locator(`.reference-node[data-id="${ref.id}"]`).click();mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/chapter-reference.png'});
  await page.getByRole('button',{name:'Close reader'}).click();await page.screenshot({path:'.data/screenshots/reference-map.png'});
  await page.getByRole('button',{name:'Clear map',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Clear map',exact:true}).click();await waitFor(s=>Object.keys(s.books[bookId].references).length===0);
  await page.getByRole('button',{name:'Open saved notes',exact:true}).click();await waitFor(s=>Object.keys(s.books[bookId].references).length>0);assert.equal(Object.keys((await state()).books[bookId].trees).length,0);
- await page.reload();await page.getByRole('navigation',{name:'Saved references'}).getByRole('button',{name:/Chapter 1/}).waitFor();assert.deepEqual(errors,[]);
+ await page.reload();await page.locator('.reference-node').filter({hasText:'Chapter 1 — Limits'}).waitFor();assert.deepEqual(errors,[]);
  console.log('Chapter notes, progress commands, reference questions, unchanged cursor, Clear/reopen and refresh passed.');
 }catch(e){mkdirSync('.data/screenshots',{recursive:true});await page.screenshot({path:'.data/screenshots/notes-failure.png'});console.error(errors);throw e;}finally{await browser.close();}

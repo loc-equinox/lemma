@@ -76,7 +76,6 @@ function App() {
   const node = selected && book ? book.nodes[selected] : undefined;
   const reference = selected && book ? book.references?.[selected] : undefined;
   const readerOpen=!!node || !!reference;
-  const references=book?Object.values(book.references || {}).filter(r=>!r.supersededBy):[];
   const activeJobs = book ? Object.values(book.jobs).filter(j=>['running','queued'].includes(j.status)) : [];
   const failedJobs = book ? Object.values(book.jobs).filter(j=>j.status==='failed' && (isDocumentJob(j)
     ? !Object.values(book.jobs).some(k=>k.id!==j.id&&k.kind===j.kind&&k.request===j.request&&k.sectionTitle===j.sectionTitle&&k.createdAt>j.createdAt&&['queued','running','completed'].includes(k.status))
@@ -139,7 +138,6 @@ function App() {
           <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_NOTES.md'}))}>Open saved notes</button>
           <button disabled={busy} onClick={()=>run(()=>act('import-document',{file:'STUDY_PROGRESS.md'}))}>Open saved progress</button>
         </div>
-        {references.length>0&&<nav className="reference-links" aria-label="Saved references">{references.map(ref=><button key={ref.id} title={ref.file} onClick={()=>{setSelected(ref.id);setComment('');}}>▧ {ref.title}</button>)}</nav>}
 
         {state?.provider==='codex'&&<GenerationControls key={book.id} bookId={book.id} settings={book.generation} disabled={busy} active={activeJobs.length>0} onSave={async settings=>{
           setBusy(true);
