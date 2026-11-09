@@ -46,6 +46,7 @@ function App() {
   const [state,setState] = useState<State>();
   const [bookId,setBookId] = useState<string|null>(localStorage.getItem('lemma-book'));
   const [selected,setSelected] = useState<string|null>(null);
+  const [readerExpanded,setReaderExpanded] = useState(()=>localStorage.getItem('lemma-reader-layout') !== 'split');
   const [showAdd,setShowAdd] = useState(false);
   const [error,setError] = useState(''); const [online,setOnline] = useState(true);
   const [busy,setBusy] = useState(false); const [prompt,setPrompt] = useState(''); const [comment,setComment] = useState('');
@@ -80,6 +81,11 @@ function App() {
     setFollow(!destination && !!currentTree(updated)?.cursor);
   }
   const openCurrent = ()=>{if(current)setSelected(current.id);else setFollow(true);};
+  function toggleReaderLayout() {
+    const expanded = !readerExpanded;
+    setReaderExpanded(expanded);
+    localStorage.setItem('lemma-reader-layout', expanded ? 'expanded' : 'split');
+  }
   const next = node && book ? successor(book,node) : null;
   const nextNode = book ? nodeAt(book,next) : undefined;
   const isCurrent = !!node && node.id===current?.id;
@@ -99,19 +105,19 @@ function App() {
       {error&&<div role="alert" className="error-banner">{error}<button aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
       {!book ? <section className="welcome"><div className="eyebrow">A SPACE TO THINK</div><h1>Understand mathematics.<br/><em>One step at a time.</em></h1><p>Bring a book, follow an idea, and ask questions along the way.<br/>Your learning path takes shape as you read.</p><button className="primary" onClick={()=>setShowAdd(true)}>Add your first book <span>＋</span></button><div className="welcome-preview"><span>01<br/><b>Understand</b></span><i>→</i><span>02<br/><b>Question</b></span><i>→</i><span>03<br/><b>Connect</b></span></div></section> : <>
       <div className="workspace-heading"><div><div className="eyebrow">LEARNING MAP</div><h1>{book.name}</h1><p>{Object.keys(book.trees).length ? 'Follow your curiosity. Each node is one conceptual step.' : 'Every idea starts with a question.'}</p></div>{tree&&<button className="resume-button" onClick={openCurrent}>{current ? `Reading ${label(book,current)} ↗` : tree.cursor ? 'Preparing your step…' : 'Learning task complete ✓'}</button>}</div>
-      <div className="workspace-body">
-        <section className="map-area" aria-label="Learning graph">
+      <div className={`workspace-body ${node ? 'has-reader' : ''}`}>
+        <section className="map-area" aria-label="Learning graph" inert={!!node && readerExpanded} aria-hidden={!!node && readerExpanded}>
           {!!Object.keys(book.trees).length&&<div className="tree-switcher">{Object.values(book.trees).map(t=><button key={t.id} className={t.id===tree?.id?'active':''} title={t.prompt} disabled={busy} onClick={()=>run(async()=>{navigate(await act('resume',{treeId:t.id}));})}>{t.id===tree?.id?'● ':''}{t.prompt}</button>)}</div>}
           {data.nodes.length ? <ReactFlow key={book.id} nodes={data.nodes} edges={data.edges} fitView fitViewOptions={{padding:.3,maxZoom:1}} minZoom={.15} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} onNodeClick={(_e,n)=>{if(book.nodes[n.id]){setSelected(n.id);setComment('');}}} proOptions={{hideAttribution:true}}><Background gap={22} size={1} color="#d6d9d1"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor={n=>n.className?.includes('studying')?'#44785d':'#d9ded6'}/></ReactFlow> : <div className="empty-map"><span className="empty-mark">∫</span><h2>A new path through your book</h2><p>Ask about a definition, explore a theorem,<br/>or work through a proof below.</p><button onClick={()=>setPrompt('Explain a central definition from this book, one conceptual step at a time.')}>Explore a definition ↗</button></div>}
           <div className="map-legend"><span><i className="green"/>Studying</span><span><i/>Ready</span><span><i className="complete"/>Completed</span><span className="legend-hint">Scroll to zoom · Drag to pan</span></div>
         </section>
-        {node&&<aside className="reader" aria-label="Step reader"><div className="reader-top"><span>{label(book,node)} <i> / {node.completed?'Completed':isCurrent?'Studying':'Preview'}</i></span><button aria-label="Close reader" onClick={()=>setSelected(null)}>×</button></div><article>
+        {node&&<aside className={`reader ${readerExpanded ? 'reader-expanded' : ''}`} aria-label="Step reader"><div className="reader-top"><span>{label(book,node)} <i> / {node.completed?'Completed':isCurrent?'Studying':'Preview'}</i></span><div className="reader-actions"><button className="reader-layout-toggle" aria-label={readerExpanded ? 'Show reader beside map' : 'Expand reader over map'} aria-pressed={readerExpanded} onClick={toggleReaderLayout}>{readerExpanded ? 'Side by side' : 'Expand reader'} <span aria-hidden="true">⤢</span></button><button className="reader-close" aria-label="Close reader" onClick={()=>setSelected(null)}>Back to map <span aria-hidden="true">×</span></button></div></div><article><div className="reader-content">
           {node.supersededBy&&<div className="revision-notice">This version has been superseded. <button onClick={()=>setSelected(node.supersededBy)}>Read the updated step →</button></div>}
           {node.version>1&&<details className="version-history"><summary>Revised · version {node.version}</summary>{Object.values(book.nodes).filter(n=>n.routeId===node.routeId&&n.index===node.index&&n.id!==node.id).map(n=><button key={n.id} onClick={()=>setSelected(n.id)}>View version {n.version}{n.supersededBy?' (superseded)':''}</button>)}</details>}
           <h2>{node.title}</h2><StepContent content={node.content}/>
           {questions.map(q=><div className="question-card" key={q.id}><span className="eyebrow">YOUR QUESTION {q.resolved?'· RESOLVED':''}</span><p>{q.text}</p>{!q.entered ? <button disabled={busy} onClick={()=>run(async()=>{navigate(await act('enter',{questionId:q.id}));})}>Enter explanation →</button> : <button onClick={()=>{const first=book.routes[q.routeId].nodeIds[0];if(first)setSelected(first);}}>View explanation ↗</button>}</div>)}
           <form className="comment-form" onSubmit={e=>{e.preventDefault();run(async()=>{await act('comments',{nodeId:node.id,text:comment});setComment('');});}}><label htmlFor="comment">Something unclear?</label><textarea id="comment" placeholder="Ask about this step…" value={comment} onChange={e=>setComment(e.target.value)} maxLength={12000}/><button disabled={busy||!comment.trim()}>Comment <span>↗</span></button></form>
-          </article><div className="reader-footer">{isCurrent&&!node.supersededBy ? <><small>{waitingQuestion?'Your question has an explanation to enter.':nextNode?`${returnStep?'Return to':'Up next'} ${label(book,nextNode)} · ${nextNode.title}`:next?'The next step will be prepared for you.':'You have reached the end of this learning task.'}</small><button className="primary" disabled={busy||waitingQuestion} onClick={()=>run(async()=>{navigate(await act('continue',{nodeId:node.id,epoch:tree!.cursorEpoch}));})}>{nextNode?`${returnStep?'Return to':'Continue to'} ${label(book,nextNode)}`:next?'Continue':'Complete this task'} <span>→</span></button></> : <><small>Viewing a step leaves your reading position unchanged.</small><button className="primary" onClick={openCurrent}>{current?'Back to current step':'Back to learning route'} <span>↗</span></button></>}</div></aside>}
+          </div></article><div className="reader-footer">{isCurrent&&!node.supersededBy ? <><small>{waitingQuestion?'Your question has an explanation to enter.':nextNode?`${returnStep?'Return to':'Up next'} ${label(book,nextNode)} · ${nextNode.title}`:next?'The next step will be prepared for you.':'You have reached the end of this learning task.'}</small><button className="primary" disabled={busy||waitingQuestion} onClick={()=>run(async()=>{navigate(await act('continue',{nodeId:node.id,epoch:tree!.cursorEpoch}));})}>{nextNode?`${returnStep?'Return to':'Continue to'} ${label(book,nextNode)}`:next?'Continue':'Complete this task'} <span>→</span></button></> : <><small>Viewing a step leaves your reading position unchanged.</small><button className="primary" onClick={openCurrent}>{current?'Back to current step':'Back to learning route'} <span>↗</span></button></>}</div></aside>}
       </div>
       <div className="bottom-area">
         {state?.provider==='codex'&&<GenerationControls key={book.id} bookId={book.id} settings={book.generation} disabled={busy} active={activeJobs.length>0} onSave={async settings=>{

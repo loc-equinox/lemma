@@ -21,3 +21,33 @@
 .model-error{font-size:11px;line-height:1.6;color:#995f42;margin-top:8px}
 .model-error button{font-size:10px;padding:4px 7px;margin-left:6px}
 @media(max-width:800px){.generation-selectors{gap:6px 12px}.generation-selectors select{max-width:205px}.generation-setting-note{width:100%}}
+
+/* Reading can occupy the canvas without changing its pan/zoom or learning state. */
+.workspace-body{position:relative}
+.reader-actions{display:flex;align-items:center;gap:18px}
+.reader-top .reader-actions button{display:inline-flex;align-items:center;gap:10px;font-size:11px;color:#6a805a;padding:6px 0}
+.reader-actions button span{font-size:20px;line-height:1}
+.reader-content{width:100%;max-width:1000px;margin:0 auto}
+.reader.reader-expanded{position:absolute;inset:0;width:100%;border:0;z-index:6}
+.reader-expanded .reader-top{height:56px;padding:0 32px}
+.reader-expanded article{padding:32px 48px 40px}
+.reader-expanded h2{font-size:32px;margin-bottom:26px}
+.reader-expanded .math-content{font-size:17px;line-height:1.9}
+.reader-expanded .math-content h1,.reader-expanded .math-content h2,.reader-expanded .math-content h3{font-size:22px}
+.reader-expanded .markdown-source{font-size:14px;min-height:300px;max-height:65dvh}
+.reader-expanded .comment-form textarea{font-size:13px;min-height:96px}
+.reader-expanded .reader-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px max(32px,calc((100% - 1000px)/2))}
+.reader-expanded .reader-footer small{font-size:11px;line-height:1.7;margin:0}
+.reader-expanded .reader-footer .primary{width:auto;min-width:220px;flex-shrink:0}
+@media(max-width:800px){
+  .workspace-body.has-reader .map-area{visibility:hidden;pointer-events:none}
+  .reader-top .reader-actions .reader-layout-toggle{display:none}
+  .reader-expanded .reader-top{padding:0 24px}
+  .reader-expanded article{padding:25px 26px 30px}
+  .reader-expanded h2{font-size:27px}
+  .reader-expanded .math-content{font-size:16px}
+  .reader-expanded .reader-footer{display:block;padding:15px 24px 20px}
+  .reader-expanded .reader-footer small{margin-bottom:12px;font-size:10px}
+  .reader-expanded .reader-footer .primary{width:100%;min-width:0}
+  .reader-expanded .markdown-source{min-height:220px;font-size:12px}
+}
